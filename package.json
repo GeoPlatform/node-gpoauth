@@ -1,0 +1,44 @@
+{
+  "name": "node-gpoauth",
+  "version": "0.0.0",
+  "description": "GPOAuth Node Module",
+  "homepage": "idp.geoplatform.gov",
+  "author": {
+    "name": "Image Matters LLC",
+    "email": "forestg@imagemattersllc.com",
+    "url": "www.imagemattersllc.com"
+  },
+  "files": [
+    "dist"
+  ],
+  "main": "dist/index.js",
+  "keywords": [
+    "idp",
+    "oauth",
+    "geoplatform",
+    "NGDA",
+    "sp"
+  ],
+  "devDependencies": {},
+  "eslintConfig": {
+    "extends": "xo-space",
+    "env": {
+      "mocha": true
+    }
+  },
+  "repository": "GeoPlatform/node-gpoauth",
+  "scripts": {
+    "prepublish": "gulp prepublish",
+    "test": "gulp test",
+    "dev": "gulp dev"
+  },
+  "private": true,
+  "dependencies": {
+    "oauth2orize": "^1.8.0",
+    "passport": "^0.3.2",
+    "passport-custom": "^1.0.5",
+    "passport-http-bearer": "^1.0.1",
+    "passport-local": "^1.0.0",
+    "password-hash": "^1.2.2",
+  }
+}
