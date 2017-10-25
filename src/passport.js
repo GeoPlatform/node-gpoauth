@@ -1,5 +1,3 @@
-//passport.js
-
 /*
  * Author: Gate Jantaraweragul
  * Created: 9/28/17
@@ -9,13 +7,13 @@
  * Configure and set passport strategies
  *
  */
-
-const Oauth2Strategy = require('passport-oauth2').Strategy,
+const passport = require('passport')
+      Oauth2Strategy = require('passport-oauth2').Strategy,
       BearerStrategy = require('passport-http-bearer').Strategy,
       refresh = require('passport-oauth2-refresh'),
       jwt = require('jsonwebtoken');
 
-module.exports = function(app, config, logger, passport){
+module.exports = function(config){
 
   passport.serializeUser(function(user, done) {
     console.log("Serialize User Object: ", user);
@@ -75,7 +73,7 @@ module.exports = function(app, config, logger, passport){
     clientSecret: config.APP_SECRET,
     scope: config.SCOPES,
     response_type: 'token',
-    callbackURL: (config.PORT == 80) ? config.BASE_URL + '/authtoken' : config.BASE_URL + ':' + config.PORT + '/authtoken'
+    callbackURL: config.APP_BASE_URL + (config.PORT ? ':' + config.PORT : '') + '/authtoken'
   }
   , function(accessToken, refreshToken, profile, done) {
       //Needs to save the user details, particularly the refreshToken
@@ -91,5 +89,7 @@ module.exports = function(app, config, logger, passport){
 
   passport.use('gpoauth', gpOauthStrat);
   refresh.use('gpoauth', gpOauthStrat);
-  
+
+  // Expose the passport setup
+  return passport;
 }

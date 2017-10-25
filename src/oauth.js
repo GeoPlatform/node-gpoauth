@@ -1,4 +1,4 @@
-const request = require('request');   
+const request = require('request');
 
 /**
  * oauth module
@@ -9,10 +9,30 @@ const request = require('request');
  * 
  * @param app - 
  */
-module.exports = function(app, config, passport, logger) {
+module.exports = function(app, userConf) {
   // validate passed in config
-  // required.... 
-  validateConfig(config); // will throw err on invalid config
+  validateUserConfig(userConf); // will throw err on invalid config
+  
+  /* 
+  * TODO: allow for a prefix for endpoints
+  * 
+  * Example: 
+  *  My NodeJS service uses the '[root]/login' route.
+  *  Allow me to set a prefix to '/oauth' so all routes
+  *  for this module are then '[root]/oauth/login' etc.
+  */
+  
+  // Combine userConfig and constants for full config
+  const config = Object.assign({}, {
+    IDP_TOKEN_URL: "/auth/token",
+    IDP_AUTH_URL: '/auth/authorize',
+    AUTH_TYPE: "grant",
+    CALLBACK: "http://localhost:3456/authtoken",
+    SCOPES: 'read'
+  }, userConf)
+
+  // Create the passport setup
+  const passport = require('./passport.js')(config);
 
   const self = this;
 
@@ -24,56 +44,53 @@ module.exports = function(app, config, passport, logger) {
    */
   app.get('/login', passport.authenticate('gpoauth', {
     session: true
-  }), (req, res, next) => {
-    console.log("USER SESSION: ", req.sessionID);
-  });
+  }), (req, res, next) => {});
 
   /**
    * 
-   * Endpoint for exchanging a grantcode for an acessToken
+   * Endpoint for exchanging a grantcode for an accessToken
    */
   app.get('/authtoken', (req, res) => {
+    console.log('Grant Code: ', req.query.code)
+
     const oauth = {
       client_id: config.APP_ID,
       client_secret: config.APP_SECRET,
       grant_type: "authorization_code",
       code: req.query.code
     };
-    
-    console.log("Oauth Object: ", oauth);
+
+    // console.log("Oauth Object: ", oauth);
     request({
       uri: config.IDP_BASE_URL + config.IDP_TOKEN_URL,
       method: 'POST',
       json: oauth
     }, function(error, response) {
       if (error) throw error;
-      
-      console.log("Token exchange respose: ", response.body);
-      
-      let profileUser = {};
-      profileUser.accessToken = response.body.access_token;
-      profileUser.refreshToken = response.body.refresh_token; // what to do with this guy...
-      //self.accessToken = profileUser.accessToken;
-      //self.refreshToken = profileUser.refreshToken;
-      
+
+      // console.log("Token exchange respose: ", response.body);
+
+      // what to do with this guy...
+      const refreshToken = response.body.refresh_token; 
+
       //real call
-      res.redirect(`/#/lma?access_token=${response.body.access_token}&token_type=Bearer`);
+      res.redirect(`/#/login?access_token=${response.body.access_token}&token_type=Bearer`);
     });
   });
-
 };
 
 
+
+
 // ===== Helper functions ===== //
-function validateConfig(config){
+function validateUserConfig(config){
   let missingFieldErr = "Invalid config passed to oauth module. Require field missing: ";
 
+  if (!config.IDP_BASE_URL) throw missingFieldErr + 'IDP_BASE_URL';
   if (!config.APP_ID) throw missingFieldErr + 'APP_ID';
   if (!config.APP_SECRET) throw missingFieldErr + 'APP_SECRET';
-  if (!config.IDP_BASE_URL) throw missingFieldErr + 'IDP_BASE_URL';
-  if (!config.IDP_BASE_URL) throw missingFieldErr + 'IDP_BASE_URL';
-  if (!config.IDP_TOKEN_URL) throw missingFieldErr + 'IDP_TOKEN_URL';
-  if (!config.LOGIN_URL) throw missingFieldErr + 'LOGIN_URL'
+  if (!config.SERVICE_NAME) throw missingFieldErr + 'SERVICE_NAME';
+  if (!config.APP_BASE_URL) throw missingFieldErr + 'APP_BASE_URL';
 
   return true;
 }
