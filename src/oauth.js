@@ -1,4 +1,5 @@
 const request = require('request');
+const jwt = require('jsonwebtoken')
 
 /**
  * oauth module
@@ -10,6 +11,7 @@ const request = require('request');
  * @param app - 
  */
 module.exports = function(app, userConf) {
+  const self = this;
   // validate passed in config
   validateUserConfig(userConf); // will throw err on invalid config
   
@@ -34,7 +36,10 @@ module.exports = function(app, userConf) {
   // Create the passport setup
   const passport = require('./passport.js')(config);
 
-  const self = this;
+  /************ Handlers ***************/
+  class MyEmitter extends require('events') {}
+  const emitter = new MyEmitter();
+
 
   /********* Routes **********/
   /**
@@ -51,7 +56,7 @@ module.exports = function(app, userConf) {
    * Endpoint for exchanging a grantcode for an accessToken
    */
   app.get('/authtoken', (req, res) => {
-    console.log('Grant Code: ', req.query.code)
+    // console.log('Grant Code: ', req.query.code)
 
     const oauth = {
       client_id: config.APP_ID,
@@ -68,15 +73,49 @@ module.exports = function(app, userConf) {
     }, function(error, response) {
       if (error) throw error;
 
-      // console.log("Token exchange respose: ", response.body);
-
       // what to do with this guy...
+      const accessToken = response.body.access_token;
       const refreshToken = response.body.refresh_token; 
 
-      //real call
-      res.redirect(`/#/login?access_token=${response.body.access_token}&token_type=Bearer`);
+      // Call again to get user data and notifiy application that user has authenticated
+      // TODO: Should avoid callback hell here...
+      request({
+        uri: config.IDP_BASE_URL + '/api/profile',
+        method: 'GET',
+        headers: { 'Authorization': 'Bearer ' + accessToken }
+      }, function(error, response) {
+        if (error) throw error;
+        // Get user data here and emit auth event for applicaion
+        emitter.emit('userAuthenticated', response.body);
+
+        // Send access_token to the User (browser)
+        res.redirect(`/#/login?access_token=${accessToken}&token_type=Bearer`);
+      });
+
     });
   });
+
+
+  /********* Middleware **********/
+  function unsafeDecoder(req, res, next) {
+    const raw = (req.headers.authorization || '').replace('Bearer ','');
+    req.jwt = jwt.decode(raw);
+    next();
+  }
+
+  function verifyJWT(req, res, next) {
+    //TODO: verify JWT has not been tampered with
+
+    // reject requset (redirect to login if invalid)
+  }
+
+  app.use(unsafeDecoder)
+  // app.use(verifyJWT)
+
+
+  /*** Expose Events so application can subscribe ***/
+  return emitter;
+
 };
 
 
@@ -89,7 +128,6 @@ function validateUserConfig(config){
   if (!config.IDP_BASE_URL) throw missingFieldErr + 'IDP_BASE_URL';
   if (!config.APP_ID) throw missingFieldErr + 'APP_ID';
   if (!config.APP_SECRET) throw missingFieldErr + 'APP_SECRET';
-  if (!config.SERVICE_NAME) throw missingFieldErr + 'SERVICE_NAME';
   if (!config.APP_BASE_URL) throw missingFieldErr + 'APP_BASE_URL';
 
   return true;
