@@ -44,30 +44,9 @@ const config = {
 
 const IDP = nodeGpoauth(app, config);
 
-
 // Setup event handlers
-IDP.on('userAuthenticated', user => {
-  // Register/link IDP user with application user
-  user === {
-    "_id": "KILTjRrzRhitJY5CRW56s9owDEMtYCldAj4IE6NxwN",
-    "modificationDate": "2017-10-27T13:47:42.207Z",
-    "creationDate": "2017-07-24T19:13:45.730Z",
-    "username": "user",
-    "title": "",
-    "firstName": "Application",
-    "lastName": "User",
-    "middleName": "",
-    "email": "user@email.com",
-    "appRole": "admin",
-    "__v": 0,
-    "lastLogin": "2017-10-27T13:47:42.205Z",
-    "resetHash": null,
-    "resetExp": null,
-    "appSettings": [],
-    "auditLog": [],
-    "lockoutCount": 7,
-    "lockedOut": false
-  }
+IDP.on('unauthorizedRequest', (req, res, next) => { 
+  //... 
 })
 ```
 
@@ -107,10 +86,70 @@ The following are the fields that can be on the configurartion object sent to no
 The following events are emitted from the module that allow the hosting Application to respond to IDP events. See the Usage section for an example of seting up an event handler. Avaliable events are listed below
 
 >### userAuthenticated
->Event that is fired when a user is authenticated to IDP through your application. This event is useful for creating a user in your system (or linking an existing user in your system) with an IDP user.  
+>Event that is fired when a user is authenticated to IDP through your application. The event will only fire when a user completes the redirect back to your application after logging into the IDP (it will not happen per request for already authenticted users). This event is useful for creating a user in your system (or linking an existing user in your system) with an IDP user.  
 >
 >**Parameters:**
 >
 >| Name | Type | Description |
 >|---|---|---|
 >|user | User | The user passed back from the IDP service (See example above for Object properties) |
+> 
+> **Example:** 
+> ```javascript
+>IDP.on('userAuthenticated', user => {
+>  // Register/link IDP user with application user
+>  user === {
+>    "_id": "KILTjRrzRhitJY5CRW56s9owDEMtYCldAj4IE6NxwN",
+>    "modificationDate": "2017-10-27T13:47:42.207Z",
+>    "creationDate": "2017-07-24T19:13:45.730Z",
+>    "username": "user",
+>    "title": "",
+>    "firstName": "Application",
+>    "lastName": "User",
+>    "middleName": "",
+>    "email": "user@email.com",
+>    "appRole": "admin",
+>    "__v": 0,
+>    "lastLogin": "2017-10-27T13:47:42.205Z",
+>    "resetHash": null,
+>    "resetExp": null,
+>    "appSettings": [],
+>    "auditLog": [],
+>    "lockoutCount": 7,
+>    "lockedOut": false
+>  }
+>})
+>```
+
+>### unauthorizedRequest
+> This event is called with an unauthorized request is made to your application. It will only be called in the event that the client (browser) making the request does not have a valid JWT. Depending on how your application is set up you may want to filter only some requests. For example, if your application servers both static assets as well as an API you will only want to limit access to the API. 
+>
+>**NOTE:**   
+>Failing to either call the next funcation or send a response to the client will cause the application to hang as Express will not continue processing the request middleware.
+>
+>**Parameters:**
+>
+>| Name | Type | Description |
+>|---|---|---|
+>|req | ExpressJS Request | The ExpressJS Requests object. |
+>|res | ExpressJS Response | The ExpressJS Response object. |
+>|next| Function | ExpressJS middleware next function. This function must be called for the application to continue with the middleware calls. Calling this function will allow a passthrough and Express will continue with serving the request|
+>
+>
+>**Example:**
+>```javascript
+>IDP.on('unauthorizedRequest', (req, res, next) => {
+>
+>  // Determine the endpoints to protect (require valid JWT)
+>  if(req.originalUrl.match(/api\/.+/)) {
+>    // protect API endpoint from unauthenticated users
+>    res.status(401).send({
+>      error: 'Unauthenticated'
+>    })
+>
+>  } else {
+>    // Allow static endpoints to be served always
+>    next();
+>  }
+>})
+>```

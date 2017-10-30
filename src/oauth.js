@@ -36,12 +36,14 @@ module.exports = function(app, userConf) {
   // Create the passport setup
   const passport = require('./passport.js')(config);
 
-  /************ Handlers ***************/
+
+  /************ Event Emitter ***************/
   class MyEmitter extends require('events') {}
   const emitter = new MyEmitter();
 
 
-  /********* Routes **********/
+
+  /**************** Routes ******************/
   /**
    * login route (root/login)
    * 
@@ -51,8 +53,7 @@ module.exports = function(app, userConf) {
     session: true
   }), (req, res, next) => {});
 
-  /**
-   * 
+  /*
    * Endpoint for exchanging a grantcode for an accessToken
    */
   app.get('/authtoken', (req, res) => {
@@ -86,7 +87,7 @@ module.exports = function(app, userConf) {
       }, function(error, response) {
         if (error) throw error;
         // Get user data here and emit auth event for applicaion
-        emitter.emit('userAuthenticated', response.body);
+        emitter.emit('userAuthenticated', JSON.parse(response.body));
 
         // Send access_token to the User (browser)
         res.redirect(`/#/login?access_token=${accessToken}&token_type=Bearer`);
@@ -96,21 +97,33 @@ module.exports = function(app, userConf) {
   });
 
 
-  /********* Middleware **********/
+  /**************** Middleware ****************/
   function unsafeDecoder(req, res, next) {
     const raw = (req.headers.authorization || '').replace('Bearer ','');
-    req.jwt = jwt.decode(raw);
-    next();
+    const decoded = jwt.decode(raw); 
+
+    if(decoded) {
+      req.jwt = decoded
+      next();
+    } else {
+      // Call the listener if registered
+      if(emitter.listenerCount('unauthorizedRequest') > 0){
+        emitter.emit('unauthorizedRequest', req, res, next);
+      } else {
+        next(); // No handler -- continue process
+      }
+    }
+
   }
 
   function verifyJWT(req, res, next) {
     //TODO: verify JWT has not been tampered with
-
     // reject requset (redirect to login if invalid)
   }
 
   app.use(unsafeDecoder)
   // app.use(verifyJWT)
+
 
 
   /*** Expose Events so application can subscribe ***/
