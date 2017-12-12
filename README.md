@@ -8,7 +8,7 @@ Node-gpoauth does the following things:
 - Automatically direct user to IDP for authentication
 - Setup endpoints on your application for redirecting users for Authentication and communicating with gpoauth IDP
 - Fetch Bearer token (JWT) and pass it to the browser (user)
-- Unpack and make JWT data avaliable per request
+- Validate (server side) JWT signature against IA application secret for each request
 - Emit important authentication events to hosting application
 
 The node-gpoauth moduel will setup up a few api routes for your application. These routes are:
@@ -84,8 +84,42 @@ The following are the fields that can be on the configurartion object sent to no
 ## Events
 ---
 The following events are emitted from the module that allow the hosting Application to respond to IDP events. See the Usage section for an example of seting up an event handler. Avaliable events are listed below
+  
+> ## unauthorizedRequest (required)
+> This event is called with an unauthorized request is made to your application. It will only be called in the event that the client (browser) making the request does not have a valid JWT. Depending on how your application is set up you may want to filter only some requests. For example, if your application servers both static assets as well as an API you will only want to limit access to the API. You application is required to implement a handler for this event. If there is no registered event handler for this event node-gpoauth will throw and error.
+>
+>**NOTE:**   
+>Failing to either call the next funcation or send a response to the client will cause the application to hang as Express will not continue processing the request middleware.
+>
+>**Parameters:**
+>
+>| Name | Type | Description |
+>|---|---|---|
+>|err | Error | The error encountered when validating the JWT. |
+>|req | ExpressJS Request | The ExpressJS Requests object. |
+>|res | ExpressJS Response | The ExpressJS Response object. |
+>|next| Function | ExpressJS middleware next function. This function must be called for the application to continue with the middleware calls. Calling this function will allow a passthrough and Express will continue with serving the request|
+>
+>
+>**Example:**
+>```javascript
+>IDP.on('unauthorizedRequest', (err, req, res, next) => {
+>
+>  // Determine the endpoints that require a valid JWT
+>  if(req.originalUrl.match(/api\/.+/)) {
+>    // protect API endpoint from unauthenticated users
+>    res.status(401).send({
+>      error: 'Unauthenticated'
+>    })
+>
+>  } else {
+>    // Allow static assets to be served without a valid JWT
+>    next();
+>  }
+>})
+>```
 
->### userAuthenticated
+>## userAuthenticated (optional)
 >Event that is fired when a user is authenticated to IDP through your application. The event will only fire when a user completes the redirect back to your application after logging into the IDP (it will not happen per request for already authenticted users). This event is useful for creating a user in your system (or linking an existing user in your system) with an IDP user.  
 >
 >**Parameters:**
@@ -121,35 +155,4 @@ The following events are emitted from the module that allow the hosting Applicat
 >})
 >```
 
->### unauthorizedRequest
-> This event is called with an unauthorized request is made to your application. It will only be called in the event that the client (browser) making the request does not have a valid JWT. Depending on how your application is set up you may want to filter only some requests. For example, if your application servers both static assets as well as an API you will only want to limit access to the API. 
->
->**NOTE:**   
->Failing to either call the next funcation or send a response to the client will cause the application to hang as Express will not continue processing the request middleware.
->
->**Parameters:**
->
->| Name | Type | Description |
->|---|---|---|
->|req | ExpressJS Request | The ExpressJS Requests object. |
->|res | ExpressJS Response | The ExpressJS Response object. |
->|next| Function | ExpressJS middleware next function. This function must be called for the application to continue with the middleware calls. Calling this function will allow a passthrough and Express will continue with serving the request|
->
->
->**Example:**
->```javascript
->IDP.on('unauthorizedRequest', (req, res, next) => {
->
->  // Determine the endpoints to protect (require valid JWT)
->  if(req.originalUrl.match(/api\/.+/)) {
->    // protect API endpoint from unauthenticated users
->    res.status(401).send({
->      error: 'Unauthenticated'
->    })
->
->  } else {
->    // Allow static endpoints to be served always
->    next();
->  }
->})
->```
+

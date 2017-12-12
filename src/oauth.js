@@ -121,29 +121,27 @@ module.exports = function(app, userConf) {
   function verifyJWT(req, res, next) {
     const raw = (req.headers.authorization || '').replace('Bearer ','');
 
-    if(req.originalUrl.match('api/')) {
-      console.log('====== : ' + req.originalUrl)
-      console.log(req.headers.authorization)
-      console.log('======')
-      console.log(oauth_signature)
-    }
-
     try {
       const decoded = jwt.verify(raw, oauth_signature); 
-      console.log(decoded)
       req.jwt = decoded
       next();
 
     } catch(e) {
-      if(req.originalUrl.match('api/')) {
-        console.log(e)
-
-      }
       // Call the listener if registered
       if(emitter.listenerCount('unauthorizedRequest') > 0){
-        emitter.emit('unauthorizedRequest', req, res, next);
+        emitter.emit('unauthorizedRequest', e, req, res, next);
+
       } else {
-        next(); // No handler -- continue process
+        // Require 'unauthorizedRequest' event handler inside hosting application
+        const msg = [
+          'node-gpoauth error\n',
+          'No event handler registered for the "unauthorizedRequest" event.\n',
+          'Your data is not secured by gpoauth!\n\n',
+          'Please see: ', 
+          'https://github.com/GeoPlatform/node-gpoauth#unauthorizedrequest ', 
+          'for implementing this event handler.\n'
+        ].join('')
+        next(new Error(msg)); // Fail if no handler setup
       }
     }
   }
