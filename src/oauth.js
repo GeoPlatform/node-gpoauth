@@ -42,6 +42,26 @@ module.exports = function(app, userConf) {
   const emitter = new MyEmitter();
 
 
+  /********* Signature Verification *********/
+  var oauth_signature = '';
+  request.post(config.IDP_BASE_URL + '/api/signature',
+  // POST data
+  { 
+    form: {
+      client_id: config.APP_ID,
+      client_secret: config.APP_SECRET
+    }
+  }, 
+  // Handler
+  function(error, response, rawBody) {
+    const body = JSON.parse(rawBody)
+    if (error || !body.secret) { 
+      throw error;
+    } else {
+      oauth_signature = Buffer.from(body.secret, 'base64').toString()
+    }
+  });
+
 
   /**************** Routes ******************/
   /**
@@ -98,14 +118,27 @@ module.exports = function(app, userConf) {
 
 
   /**************** Middleware ****************/
-  function unsafeDecoder(req, res, next) {
+  function verifyJWT(req, res, next) {
     const raw = (req.headers.authorization || '').replace('Bearer ','');
-    const decoded = jwt.decode(raw); 
 
-    if(decoded) {
+    if(req.originalUrl.match('api/')) {
+      console.log('====== : ' + req.originalUrl)
+      console.log(req.headers.authorization)
+      console.log('======')
+      console.log(oauth_signature)
+    }
+
+    try {
+      const decoded = jwt.verify(raw, oauth_signature); 
+      console.log(decoded)
       req.jwt = decoded
       next();
-    } else {
+
+    } catch(e) {
+      if(req.originalUrl.match('api/')) {
+        console.log(e)
+
+      }
       // Call the listener if registered
       if(emitter.listenerCount('unauthorizedRequest') > 0){
         emitter.emit('unauthorizedRequest', req, res, next);
@@ -113,22 +146,13 @@ module.exports = function(app, userConf) {
         next(); // No handler -- continue process
       }
     }
-
   }
 
-  function verifyJWT(req, res, next) {
-    //TODO: verify JWT has not been tampered with
-    // reject requset (redirect to login if invalid)
-  }
-
-  app.use(unsafeDecoder)
-  // app.use(verifyJWT)
-
-
+  // Add verifyJWT as Express middleware
+  app.use(verifyJWT)
 
   /*** Expose Events so application can subscribe ***/
   return emitter;
-
 };
 
 
