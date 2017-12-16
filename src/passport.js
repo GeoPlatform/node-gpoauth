@@ -9,46 +9,14 @@
  */
 const passport = require('passport')
       Oauth2Strategy = require('passport-oauth2').Strategy,
-      BearerStrategy = require('passport-http-bearer').Strategy,
-      refresh = require('passport-oauth2-refresh'),
-      jwt = require('jsonwebtoken');
+      refresh = require('passport-oauth2-refresh');
+      BearerStrategy = require('passport-http-bearer').Strategy;
 
 module.exports = function(config){
 
-  passport.serializeUser(function(user, done) {
-    console.log("Serialize User Object: ", user);
-  done(null, user._id);
-  });
-
-  passport.deserializeUser(function(id, done) {
-    User.findById(id, function(err, user) {
-      done(err, user);
-    });
-  });  
-  
-  passport.use(new BearerStrategy(function(token, done) {
-    // var decodedJwt = jwt.decode(token);
-    // if (decodedJwt.exp * 1000 > Date.now()){
-    //   return done(new Error("JWT is expired"), false);
-    // }
-    // jwt token auth
-    jwt.verify(token, jwtSecret, function(err, decoded) {
-      if (err) return done(err);
-      console.log("Decoded value: ", decoded);
-      User.findOne({
-        userId: decoded.sub
-      }, function(err, user) {
-        if (err) return done(err);
-        if (user) {
-          return done(null, user, decoded.scope);
-        } else {
-          return done(null, false);
-        }
-      })
-    })
-  }));
-
   passport.use('refresh', new BearerStrategy(function(token, done) {
+    console.log(token)
+    done(null, false)
     var decoded = jwt.verify(token, jwtSecret, {ignoreExpiration: true});
       if (!decoded) return done(null, false);
       console.log("Decoded value: ", decoded);
@@ -64,8 +32,6 @@ module.exports = function(config){
       })
   }));
   
-  //console.log("Appconfig sent to oauth: ", config);
-  
   var gpOauthStrat = new Oauth2Strategy({
     authorizationURL: config.IDP_BASE_URL + config.IDP_AUTH_URL,
     tokenURL: config.IDP_BASE_URL + config.IDP_TOKEN_URL,
@@ -76,14 +42,7 @@ module.exports = function(config){
     callbackURL: config.APP_BASE_URL + (config.PORT ? ':' + config.PORT : '') + '/authtoken'
   }
   , function(accessToken, refreshToken, profile, done) {
-      //Needs to save the user details, particularly the refreshToken
-      
-      console.log(profile);
-      
-      // User.findOrCreate({ userId: profile.id }, function (err, user) {
-      //   //find and update the accessToken and refreshToken after you find/create
-      //   done(err, user);
-      // });
+      // console.log(profile);
     }
   );
 
