@@ -2,6 +2,10 @@ const request = require('request');
 const jwt = require('jsonwebtoken');
 let tokenCache = require('./tokenCache.js');
 
+/************ Event Emitter ***************/
+class MyEmitter extends require('events') {}
+const emitter = new MyEmitter();
+
 /**
  * oauth module
  * 
@@ -36,12 +40,6 @@ module.exports = function(app, userConf) {
 
   // Create the passport setup
   const passport = require('./passport.js')(config);
-  const refresh = require('passport-oauth2-refresh');
-
-
-  /************ Event Emitter ***************/
-  class MyEmitter extends require('events') {}
-  const emitter = new MyEmitter();
 
 
   /********* Signature Verification *********/
@@ -88,7 +86,8 @@ module.exports = function(app, userConf) {
 
       // Automatically do the refresh if token has expired
       if (err instanceof jwt.TokenExpiredError) {
-        refreshAccessToken(accessToken, res, next);
+        console.log('Expired: ', tokenDemo(accessToken || 'XXXX -- XXXX'))
+        refreshAccessToken(accessToken, req, res, next);
 
       // Call the listener 'unauthorizedRequest' handler if registered
       } else if(emitter.listenerCount('unauthorizedRequest') > 0){
@@ -124,12 +123,14 @@ module.exports = function(app, userConf) {
     session: true
   }), (req, res, next) => {});
 
+  // app.get('/revoke', passport.authenticate('gpoauth', {
+  //   session: true
+  // }), (req, res, next) => {});
+
   /*
    * Endpoint for exchanging a grantcode for an accessToken
    */
   app.get('/authtoken', (req, res) => {
-    // console.log('Grant Code: ', req.query.code)
-
     const oauth = {
       client_id: config.APP_ID,
       client_secret: config.APP_SECRET,
@@ -137,7 +138,6 @@ module.exports = function(app, userConf) {
       code: req.query.code
     };
 
-    // console.log("Oauth Object: ", oauth);
     request({
       uri: config.IDP_BASE_URL + config.IDP_TOKEN_URL,
       method: 'POST',
@@ -161,7 +161,6 @@ module.exports = function(app, userConf) {
       }, function(error, response) {
         if (error) throw error;
         // Get user data here and emit auth event for applicaion
-        console.log(response.body)
         emitter.emit('userAuthenticated', JSON.parse(response.body));
 
         // Send access_token to the User (browser)
@@ -193,59 +192,100 @@ function validateUserConfig(config){
 }
 
 /**
- * DOCUMENT ME!
+ * Takes an expired AccessToken and exchanges it for a new one (via a 
+ * refreshToken). This funtion will debounce requests with the same AccessToken
+ * and resolve all of them together (once the new token is aquired).
+ * 
+ * External Deps: 
+ *  - tokenCache: a TokenCache instance
+ * 
+ * Side effects:
+ *  - Adds a new AccessToken / RefreshToken pair to tokenCache
+ *  - Removes expired AccessToken / RefreshToken pair from tokenCache
+ *  - sets the Authorization header on the response object on successful refresh
+ *
+ * @method refreshAccessToken
+ * @see returned function for params list
  */
 const refreshAccessToken = (function(){
   // encloing scope: private variables for retunred function
 
   /*
-   * Object for queuing refresh request (debounce):
-   * {
-   *    accessToken: callback[] 
-   * }
+   * Object for queuing refresh request (debounce). This keeps track of all 
+   * pending requests for a new refresh token along with all the requests
+   * to the server awaiting an authentication decision. 
+   * 
+   * Schema:
+   *  { 
+   *    accessToken: {
+   *      request: , // id of function call to refresh token
+   *      queue: next[] // next middleware calls awaiting auth decision 
+   *    },
+   *    ... 
+   *  }
    */
   let refreshQueue = {}
-  let timer = null;
-  const delay = 200;
+  const refresh = require('passport-oauth2-refresh');
+  const delay = 200; // debounce delay
 
-  // resolving function
-  return function(oldAccessToken, res, callback){
-    // Debounce the call to fetch refresh token
-    clearTimeout(timer)
+  /**
+   * The function assigned to refreshAccessToken. This is the callable 
+   * function.
+   * 
+   * @param {AccessToken} oldAccessToken - expired AccessToken to refresh
+   * @param {Request} req - Express request object
+   * @param {Response} res - Express response object
+   * @param {Middleware next} next - Express middleware next function 
+   */
+  return function(oldAccessToken, req, res, next){
+    if(refreshQueue[oldAccessToken]){ 
+      // Debounce the call to fetch refresh token
+      clearTimeout(refreshQueue[oldAccessToken].request)
+      refreshQueue[oldAccessToken].queue.push(next);
+    } else {
+      // Add refreshQueue record if none existing for this oldAccessToken
+      refreshQueue[oldAccessToken] = { 
+        request: null,
+        queue: [next]
+      }
+    }
+    let refreshQueueRecord = refreshQueue[oldAccessToken]
     const oldRefreshToken = tokenCache.getRefreshToken(oldAccessToken)
 
-    // Add to or create queue for token refresh
-    if(refreshQueue[oldAccessToken]){
-      refreshQueue[oldAccessToken].push(callback);
-    } else {
-      refreshQueue[oldAccessToken] = [callback];
-    }
-
-    timer = setTimeout(() => {
+    refreshQueueRecord.request = setTimeout(() => {
       refresh.requestNewAccessToken('gpoauth', oldRefreshToken, (err, newAccessToken, newRefreshToken) => {
-        if(err || !newAccessToken){
-          console.log("=== Error on refresh token: ===");
-          console.log(err)
-          // res.redirect(`/#/login`);
-          // Need to send error to applicaiton here?
-        } else {
-          console.log("==== New Token ====")
-          console.log('|| Access:  ' + tokenDemo(newAccessToken))
-          console.log('|| Refresh: ' + tokenDemo(newRefreshToken))
-          console.log("===================")
+        if(!err && newAccessToken){
+          // console.log("==== New Token ====")
+          // console.log('|| Access:  ' + tokenDemo(newAccessToken))
+          // console.log('|| Refresh: ' + tokenDemo(newRefreshToken))
+          // console.log("===================")
 
           // Send new AccessToken back to the browser though the Athorization header
           res.header('Authorization', 'Bearer ' + newAccessToken);
 
-          // Continue requests that are waiting and remove queue
-          refreshQueue[oldAccessToken]
-            .map(next => next(err)) // pass processing to all requests
-          delete refreshQueue[oldAccessToken];
-
           // Remove old & add new refreshTokens to cache.
           tokenCache.remove(oldAccessToken);
           tokenCache.add(newAccessToken, newRefreshToken);
+
+        } else {
+          console.log("=== Error on refresh token: ===");
+          console.log(err)
+          if(emitter.listenerCount('errorRefreshingAccessToken') > 0){
+            const eventError = {
+              error: new Error("Unable to exchange RefreshToken for new AccessToken"),
+              idpError: err
+            }
+            emitter.emit('errorRefreshingAccessToken', eventError, req, res, next);
+          } else {
+            // Default behavior is to redirect to login if no handler registered
+            res.redirect(`/login`);
+          }
         }
+
+        // Continue requests that are waiting and remove queue
+        refreshQueueRecord.queue.map(next => next(err)) // pass processing to all requests
+        delete refreshQueue[oldAccessToken];
+
       })
     }, delay);
 
