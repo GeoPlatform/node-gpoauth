@@ -12,7 +12,7 @@
 /**
  * Associative Array of: 
  * { 
- *    Access Tokens: Refresh Token
+ *    AccessTokens: RefreshToken
  * }
  * 
  * We use Access Tokens as keys because we are able to validate them with the

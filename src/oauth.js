@@ -54,10 +54,20 @@ module.exports = function(app, userConf) {
     }, 
     // Handler
     function(error, response, rawBody) {
-      if(error) throw new Error("Unable to load signture for gpoauth IDP server")
+      if(error) { 
+        throw new Error(['Not able to connect to gpoauth and fetch signature for JWT validation\n',
+                  'Please check your settings passed to node-gpoauth and that the gpoauth server is running.\n',
+                  'See: https://github.com/GeoPlatform/node-gpoauth#usage for config options and settings.'
+                  ].join(''),
+                  error);
+      }
       const body = JSON.parse(rawBody)
       if (!body.secret) { 
-        throw error;
+        throw new Error(['No signature returned from gpoauth.\n' +
+                        'This likely means the APP_ID and APP_SECRET are either', 
+                        'invalid or not registed with the gpoauth server.', 
+                        ].join(''),
+                        error);
       } else {
         oauth_signature = Buffer.from(body.secret, 'base64').toString()
       }
@@ -75,7 +85,7 @@ module.exports = function(app, userConf) {
    * 
    */
   function verifyJWT(req, res, next) {
-    const accessToken = (req.headers.authorization || '').replace('Bearer ','');
+    const accessToken = getToken(req);
 
     try {
       const decoded = jwt.verify(accessToken, oauth_signature); 
@@ -86,7 +96,7 @@ module.exports = function(app, userConf) {
 
       // Automatically do the refresh if token has expired
       if (err instanceof jwt.TokenExpiredError) {
-        console.log('Expired: ', tokenDemo(accessToken || 'XXXX -- XXXX'))
+        // console.log('Expired: ', tokenDemo(accessToken || 'XXXX -- XXXX'))
         refreshAccessToken(accessToken, req, res, next);
 
       // Call the listener 'unauthorizedRequest' handler if registered
@@ -123,9 +133,31 @@ module.exports = function(app, userConf) {
     session: true
   }), (req, res, next) => {});
 
-  // app.get('/revoke', passport.authenticate('gpoauth', {
-  //   session: true
-  // }), (req, res, next) => {});
+  /**
+   * Call to revoke (logout) on the gpoauth server
+   */
+  app.get('/revoke', (req, res, next) => {
+    const accessToken = getToken(req);
+
+    // Make the call to revoke the token
+    request({
+      uri: config.IDP_BASE_URL + '/auth/revoke',
+      method: 'GET',
+      headers: { 'Authorization': 'Bearer ' + accessToken }
+    }, function(error, response) {
+      if (error) {
+        throw error;
+        res.status(500).send(error);
+      }
+
+      tokenCache.remove(accessToken)
+      emitter.emit('accessTokenRevoked', jwt.decode(accessToken), accessToken);
+
+      // May want to force redirect here at some point
+      // res.redirect(`/#/login?access_token=null`);
+      res.send({ status: 'ok' })
+    });
+  });
 
   /*
    * Endpoint for exchanging a grantcode for an accessToken
@@ -268,8 +300,8 @@ const refreshAccessToken = (function(){
           tokenCache.add(newAccessToken, newRefreshToken);
 
         } else {
-          console.log("=== Error on refresh token: ===");
-          console.log(err)
+          // console.log("=== Error on refresh token: ===");
+          // console.log(err)
           if(emitter.listenerCount('errorRefreshingAccessToken') > 0){
             const eventError = {
               error: new Error("Unable to exchange RefreshToken for new AccessToken"),
@@ -291,6 +323,15 @@ const refreshAccessToken = (function(){
 
   }
 })();
+
+/**
+ * Get the accessToken from request.
+ * 
+ * @param {Request} req 
+ */
+function getToken(req){
+  return (req.headers.authorization || '').replace('Bearer ','');
+}
 
 function tokenDemo(token){
   const len = token.length

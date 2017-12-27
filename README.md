@@ -83,7 +83,7 @@ The following are the fields that can be on the configurartion object sent to no
 
 ## Events
 ---
-The following events are emitted from the module that allow the hosting Application to respond to IDP events. See the Usage section for an example of seting up an event handler. Avaliable events are listed below
+The following events are emitted from the module that allow the hosting Application to respond to IDP events. See the Usage section for an example of seting up an event handler. Avaliable events are:
   
 > ## unauthorizedRequest (required)
 > This event is called with an unauthorized request is made to your application. It will only be called in the event that the client (browser) making the request does not have a valid JWT. Depending on how your application is set up you may want to filter only some requests. For example, if your application servers both static assets as well as an API you will only want to limit access to the API. You application is required to implement a handler for this event. If there is no registered event handler for this event node-gpoauth will throw and error.
@@ -118,6 +118,7 @@ The following events are emitted from the module that allow the hosting Applicat
 >  }
 >})
 >```
+<br>
 
 >## userAuthenticated (optional)
 >Event that is fired when a user is authenticated to IDP through your application. The event will only fire when a user completes the redirect back to your application after logging into the IDP (it will not happen per request for already authenticted users). This event is useful for creating a user in your system (or linking an existing user in your system) with an IDP user.  
@@ -152,6 +153,24 @@ The following events are emitted from the module that allow the hosting Applicat
 >    "lockoutCount": 7,
 >    "lockedOut": false
 >  }
+>})
+>```
+<br>
+
+>## accessTokenRevoked (optional)
+>Event called with a user's access has been revoked (usually user initiated).
+>
+>**Parameters:**
+>
+>| Name | Type | Description |
+>|---|---|---|
+>|jwt | JWT | The revoked JWT |
+>|revokedToken | AccessToken | The raw token that was revoked |
+> 
+> **Example:** 
+> ```javascript
+>IDP.on('userAuthenticated', (jwt, revokedToken) => {
+>  // handle event here
 >})
 >```
 
