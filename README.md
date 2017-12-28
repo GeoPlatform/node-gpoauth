@@ -18,14 +18,16 @@ The node-gpoauth moduel will setup up a few api routes for your application. The
 |/login | Endpoint that will re-direct user to IDP for authentication. |
 |/authtoken | Endopint that will handle Grant Code exchange from IDP. |
 
-<br><br>
+<br>
 
-## Usage
+## Installation
+
 Import node-gpoauth directly from github using the following in package.json:
-> npm install https://github.com/GeoPlatform/node-gpoauth  
+>npm install git+https://github.com/GeoPlatform/node-gpoauth.git
 
 <br>
 
+## Usage
 Load and instanciate the module:
 ```javascript
 // Modules =================================================
@@ -62,7 +64,6 @@ Setting up the module requires two fields:
 <br><br>
 
 ## Configuration
----
 The following are the fields that can be on the configurartion object sent to node-gpoauth.
 ### Required Fields
 
@@ -82,7 +83,6 @@ The following are the fields that can be on the configurartion object sent to no
 <br><br>
 
 ## Events
----
 The following events are emitted from the module that allow the hosting Application to respond to IDP events. See the Usage section for an example of seting up an event handler. Avaliable events are:
   
 > ## unauthorizedRequest (required)
@@ -118,7 +118,7 @@ The following events are emitted from the module that allow the hosting Applicat
 >  }
 >})
 >```
-<br>
+---
 
 >## userAuthenticated (optional)
 >Event that is fired when a user is authenticated to IDP through your application. The event will only fire when a user completes the redirect back to your application after logging into the IDP (it will not happen per request for already authenticted users). This event is useful for creating a user in your system (or linking an existing user in your system) with an IDP user.  
@@ -155,7 +155,7 @@ The following events are emitted from the module that allow the hosting Applicat
 >  }
 >})
 >```
-<br>
+---
 
 >## accessTokenRevoked (optional)
 >Event called with a user's access has been revoked (usually user initiated).
