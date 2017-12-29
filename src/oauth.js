@@ -5,6 +5,8 @@ let tokenCache = require('./tokenCache.js');
 /************ Event Emitter ***************/
 class MyEmitter extends require('events') {}
 const emitter = new MyEmitter();
+const errorHeader = `========[ node-gpoauth error ]=========\n`
+let DEBUG; // set when config passed in
 
 /**
  * oauth module
@@ -38,6 +40,9 @@ module.exports = function(app, userConf) {
     SCOPES: 'read'
   }, userConf)
 
+  DEBUG = config.DEBUG
+  debug('Debugger enabled')
+
   // Create the passport setup
   const passport = require('./passport.js')(config);
 
@@ -55,15 +60,14 @@ module.exports = function(app, userConf) {
     // Handler
     function(error, response, rawBody) {
       if(error) { 
-        throw new Error(['Not able to connect to gpoauth and fetch signature for JWT validation\n',
+        throw formalError(['Not able to connect to gpoauth and fetch signature for JWT validation\n',
                   'Please check your settings passed to node-gpoauth and that the gpoauth server is running.\n',
-                  'See: https://github.com/GeoPlatform/node-gpoauth#usage for config options and settings.'
                   ].join(''),
                   error);
       }
       const body = JSON.parse(rawBody)
       if (!body.secret) { 
-        throw new Error(['No signature returned from gpoauth.\n' +
+        throw formalError(['No signature returned from gpoauth.\n' +
                         'This likely means the APP_ID and APP_SECRET are either', 
                         'invalid or not registed with the gpoauth server.', 
                         ].join(''),
@@ -96,11 +100,13 @@ module.exports = function(app, userConf) {
 
       // Automatically do the refresh if token has expired
       if (err instanceof jwt.TokenExpiredError) {
-        // console.log('Expired: ', tokenDemo(accessToken || 'XXXX -- XXXX'))
+        debug(`Expired token used: ${tokenDemo(accessToken)}`)
+
         refreshAccessToken(accessToken, req, res, next);
 
       // Call the listener 'unauthorizedRequest' handler if registered
       } else if(emitter.listenerCount('unauthorizedRequest') > 0){
+        debug(`unauthorizedRequest - Token: ${tokenDemo(accessToken)} | Resource: ${req.originalUrl}`)
         emitter.emit('unauthorizedRequest', err, req, res, next);
 
       // Require 'unauthorizedRequest' event handler inside hosting application
@@ -113,7 +119,7 @@ module.exports = function(app, userConf) {
           'https://github.com/GeoPlatform/node-gpoauth#unauthorizedrequest-required ', 
           'for implementing this event handler.\n'
         ].join('')
-        next(new Error(msg)); // Fail if no handler setup
+        next(new Error(errorHeader + msg)); // Fail if no handler setup
       }
     }
   }
@@ -193,7 +199,9 @@ module.exports = function(app, userConf) {
       }, function(error, response) {
         if (error) throw error;
         // Get user data here and emit auth event for applicaion
-        emitter.emit('userAuthenticated', JSON.parse(response.body));
+        const user = JSON.parse(response.body);
+        debug(`User Authenticated: ${user.email}`)
+        emitter.emit('userAuthenticated', user);
 
         // Send access_token to the User (browser)
         res.redirect(`/#/login?access_token=${accessToken}&token_type=Bearer`);
@@ -213,12 +221,12 @@ module.exports = function(app, userConf) {
 
 // ===== Helper functions ===== //
 function validateUserConfig(config){
-  let missingFieldErr = "Invalid config passed to oauth module. Require field missing: ";
+  let missingFieldErr = "Invalid config passed to node-gpoauth module.\n     Require field missing: ";
 
-  if (!config.IDP_BASE_URL) throw missingFieldErr + 'IDP_BASE_URL';
-  if (!config.APP_ID) throw missingFieldErr + 'APP_ID';
-  if (!config.APP_SECRET) throw missingFieldErr + 'APP_SECRET';
-  if (!config.APP_BASE_URL) throw missingFieldErr + 'APP_BASE_URL';
+  if (!config.IDP_BASE_URL) throw formalError(missingFieldErr + 'IDP_BASE_URL');
+  if (!config.APP_ID) throw formalError(missingFieldErr + 'APP_ID');
+  if (!config.APP_SECRET) throw formalError(missingFieldErr + 'APP_SECRET');
+  if (!config.APP_BASE_URL) throw formalError(missingFieldErr + 'APP_BASE_URL');
 
   return true;
 }
@@ -287,10 +295,11 @@ const refreshAccessToken = (function(){
     refreshQueueRecord.request = setTimeout(() => {
       refresh.requestNewAccessToken('gpoauth', oldRefreshToken, (err, newAccessToken, newRefreshToken) => {
         if(!err && newAccessToken){
-          // console.log("==== New Token ====")
-          // console.log('|| Access:  ' + tokenDemo(newAccessToken))
-          // console.log('|| Refresh: ' + tokenDemo(newRefreshToken))
-          // console.log("===================")
+          debug("==== New Token ====")
+          debug('|| Access:  ' + tokenDemo(newAccessToken))
+          debug('|| Refresh: ' + tokenDemo(newRefreshToken))
+          debug("===================")
+
 
           // Send new AccessToken back to the browser though the Athorization header
           res.header('Authorization', 'Bearer ' + newAccessToken);
@@ -300,11 +309,12 @@ const refreshAccessToken = (function(){
           tokenCache.add(newAccessToken, newRefreshToken);
 
         } else {
-          // console.log("=== Error on refresh token: ===");
-          // console.log(err)
+          debug("=== Error on refresh token: ===");
+          debug(err)
+
           if(emitter.listenerCount('errorRefreshingAccessToken') > 0){
             const eventError = {
-              error: new Error("Unable to exchange RefreshToken for new AccessToken"),
+              error: new Error(errorHeader + "Unable to exchange RefreshToken for new AccessToken"),
               idpError: err
             }
             emitter.emit('errorRefreshingAccessToken', eventError, req, res, next);
@@ -335,5 +345,23 @@ function getToken(req){
 
 function tokenDemo(token){
   const len = token.length
-  return `${token.substring(0,4)}...[${len}]...${token.substring(len-4)}`
+  return len ? 
+        `${token.substring(0,4)}...[${len}]...${token.substring(len-4)}` :
+        '[No token]'
+}
+
+function formalError(msg, err){
+  const footer = ['Please see:\n', 
+        '    https://github.com/GeoPlatform/node-gpoauth\n',
+        'for more info and configuration settings.']
+        .join('')
+  return new Error(`${errorHeader}\n${msg}\n${footer}\n\n`, err || {})
+}
+
+function debug(msg){
+  if(DEBUG){
+    const prefix = `[node-gpoauth ${(new Date()).toLocaleTimeString()}] `
+    console.log(prefix + msg)
+  }
+  // else do nothing
 }
