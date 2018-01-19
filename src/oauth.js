@@ -54,7 +54,7 @@ module.exports = function(app, userConf) {
 
 
   /********* Signature Verification *********/
-  var oauth_signature = '';
+  let oauth_signature = '';
   debug("-- Fetching signature from gpoauth (for verifying JWTs) -- ")
   request.post(config.IDP_BASE_URL + '/api/signature',
     // POST data
@@ -219,6 +219,11 @@ module.exports = function(app, userConf) {
       // cache the refreshToken
       tokenCache.add(accessToken, refreshToken)
 
+      if(DEBUG){
+        debug("User Authenticated - JWT:")
+        console.log(jwt.decode(accessToken))
+      }
+
       // Call again to get user data and notifiy application that user has authenticated
       if(emitter.listenerCount('userAuthenticated') > 0){
 
@@ -237,7 +242,7 @@ module.exports = function(app, userConf) {
           // Get user data here and emit auth event for applicaion
           try{
             const user = JSON.parse(response.body);
-            debug(`User Authenticated: ${user.email}`)
+            debug("User profile retrieved.")
             emitter.emit('userAuthenticated', user);
 
           } catch(e) {
