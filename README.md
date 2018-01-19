@@ -79,6 +79,7 @@ The following are the fields that can be on the configurartion object sent to no
 | Field | Type | Description| Example |
 |---|---|---|---|
 |SERVICE_NAME| string | The name of the Application hosting this module | Map_Service|
+|DEBUG| boolean | If true print out debug information from node-gpoauth | true|
 
 <br><br>
 
@@ -169,7 +170,7 @@ The following events are emitted from the module that allow the hosting Applicat
 > 
 > **Example:** 
 > ```javascript
->IDP.on('userAuthenticated', (jwt, revokedToken) => {
+>IDP.on('accessTokenRevoked', (jwt, revokedToken) => {
 >  // handle event here
 >})
 >```

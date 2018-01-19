@@ -37,14 +37,14 @@
     "request": "^2.83.0"
   },
   "devDependencies": {
+    "chai": "^4.1.2",
     "express": "^4.16.2",
-    "mocha": "^4.0.1",
-    "chai": "^4.1.2"
+    "mocha": "^4.1.0"
   },
   "config": {
     "IDP_BASE_URL": "http://localhost:8889",
-    "APP_ID": "105",
-    "APP_SECRET": "KILTjRrzRhitJY5CRW56d6rPDEMtYCldAj4IE6NxwN",
+    "APP_ID": "5a5fb0b338ce56de160458cf",
+    "APP_SECRET": "UbiG1An7Cpy2nnbcgWXjNptboQcvxkp0YCiEZkCeMe",
     "SERVICE_NAME": "node-gpoauth",
     "APP_BASE_URL": "http://localhost:3456"
   }

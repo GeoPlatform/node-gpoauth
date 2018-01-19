@@ -31,6 +31,12 @@ module.exports = function(app, userConf) {
   *  for this module are then '[root]/oauth/login' etc.
   */
   
+  /*
+   * TODO:
+   *  We should use formal errors (seporate file) so we can 
+   *  do type checking against them in test cases. 
+   */
+
   // Combine userConfig and constants for full config
   const config = Object.assign({}, {
     IDP_TOKEN_URL: "/auth/token",
@@ -49,9 +55,10 @@ module.exports = function(app, userConf) {
 
   /********* Signature Verification *********/
   var oauth_signature = '';
+  debug("-- Fetching signature from gpoauth (for verifying JWTs) -- ")
   request.post(config.IDP_BASE_URL + '/api/signature',
     // POST data
-    { 
+    {
       form: {
         client_id: config.APP_ID,
         client_secret: config.APP_SECRET
@@ -60,19 +67,29 @@ module.exports = function(app, userConf) {
     // Handler
     function(error, response, rawBody) {
       if(error) { 
+        debug("Error retrieving signature from gpoauth")
         throw formalError(['Not able to connect to gpoauth and fetch signature for JWT validation\n',
                   'Please check your settings passed to node-gpoauth and that the gpoauth server is running.\n',
                   ].join(''),
                   error);
       }
-      const body = JSON.parse(rawBody)
-      if (!body.secret) { 
+
+      try{
+        var body = JSON.parse(rawBody)
+      } catch(err){
+        console.error('Was not to parse signature from gpoauth.')
+        throw err
+      }
+
+      if (!body.secret) {
+        debug("Error retrieving signature from gpoauth")
         throw formalError(['No signature returned from gpoauth.\n' +
                         'This likely means the APP_ID and APP_SECRET are either', 
                         'invalid or not registed with the gpoauth server.', 
                         ].join(''),
                         error);
       } else {
+        debug("-- Signature obtained and stored --")
         oauth_signature = Buffer.from(body.secret, 'base64').toString()
       }
   });
@@ -94,14 +111,22 @@ module.exports = function(app, userConf) {
     try {
       const decoded = jwt.verify(accessToken, oauth_signature); 
       req.jwt = decoded
+        debug(`Access Granted - Token: ${tokenDemo(accessToken)} | Resource: ${req.originalUrl}`)
+
       next();
 
     } catch(err) {
 
-      // Automatically do the refresh if token has expired
-      if (err instanceof jwt.TokenExpiredError) {
-        debug(`Expired token used: ${tokenDemo(accessToken)}`)
+      // Pass them through on endpoints setup by gpoauth
+      if(req.originalUrl.match('login') || 
+        req.originalUrl.match('authtoken') ||
+        req.originalUrl.match('revoke')
+      ){
+        next();
 
+        // Automatically do the refresh if token has expired 
+      } else if (err instanceof jwt.TokenExpiredError) {
+        debug(`Expired token used: ${tokenDemo(accessToken)}`)
         refreshAccessToken(accessToken, req, res, next);
 
       // Call the listener 'unauthorizedRequest' handler if registered
@@ -181,9 +206,13 @@ module.exports = function(app, userConf) {
       method: 'POST',
       json: oauth
     }, function(error, response) {
-      if (error) throw error;
+      if (error){
+        console.error(formalError("Error exchanging grant for access token (JWT)\nUser was not authenticated."))
+        // Don't crash user applicaiton for this. Pass them thorugh without a token
+        res.redirect(`/#/login`);
+        return // end execution
+      }
 
-      // what to do with this guy...
       const accessToken = response.body.access_token;
       const refreshToken = response.body.refresh_token;
 
@@ -191,21 +220,38 @@ module.exports = function(app, userConf) {
       tokenCache.add(accessToken, refreshToken)
 
       // Call again to get user data and notifiy application that user has authenticated
-      // TODO: Should avoid callback hell here...
-      request({
-        uri: config.IDP_BASE_URL + '/api/profile',
-        method: 'GET',
-        headers: { 'Authorization': 'Bearer ' + accessToken }
-      }, function(error, response) {
-        if (error) throw error;
-        // Get user data here and emit auth event for applicaion
-        const user = JSON.parse(response.body);
-        debug(`User Authenticated: ${user.email}`)
-        emitter.emit('userAuthenticated', user);
+      if(emitter.listenerCount('userAuthenticated') > 0){
 
-        // Send access_token to the User (browser)
-        res.redirect(`/#/login?access_token=${accessToken}&token_type=Bearer`);
-      });
+        // TODO: Should avoid callback hell here...
+        request({
+          uri: config.IDP_BASE_URL + '/api/profile',
+          method: 'GET',
+          headers: { 'Authorization': 'Bearer ' + accessToken }
+        }, function(error, response) {
+          if (error) {
+            console.error(formalError("Error retrieving user information."))
+            // Don't crash user applicaiton for this. Pass them thorugh without a token
+            res.redirect(`/#/login`);
+            return // end execution
+          }
+          // Get user data here and emit auth event for applicaion
+          try{
+            const user = JSON.parse(response.body);
+            debug(`User Authenticated: ${user.email}`)
+            emitter.emit('userAuthenticated', user);
+
+          } catch(e) {
+            console.error(formalError("Error parsing user information returned from gpoauth.\nInfo retruned: " + response.body))
+          } finally {
+            // Send access_token to the User (browser)
+            res.redirect(`/#/login?access_token=${accessToken}&token_type=Bearer`);
+          }
+        });
+
+      } else {
+          // Send access_token to the User (browser)
+          res.redirect(`/#/login?access_token=${accessToken}&token_type=Bearer`);
+      }
 
     });
   });
@@ -223,10 +269,10 @@ module.exports = function(app, userConf) {
 function validateUserConfig(config){
   let missingFieldErr = "Invalid config passed to node-gpoauth module.\n     Require field missing: ";
 
-  if (!config.IDP_BASE_URL) throw formalError(missingFieldErr + 'IDP_BASE_URL');
-  if (!config.APP_ID) throw formalError(missingFieldErr + 'APP_ID');
-  if (!config.APP_SECRET) throw formalError(missingFieldErr + 'APP_SECRET');
-  if (!config.APP_BASE_URL) throw formalError(missingFieldErr + 'APP_BASE_URL');
+  if (!config.IDP_BASE_URL) throw formalConfigError(missingFieldErr + 'IDP_BASE_URL');
+  if (!config.APP_ID) throw formalConfigError(missingFieldErr + 'APP_ID');
+  if (!config.APP_SECRET) throw formalConfigError(missingFieldErr + 'APP_SECRET');
+  if (!config.APP_BASE_URL) throw formalConfigError(missingFieldErr + 'APP_BASE_URL');
 
   return true;
 }
@@ -278,6 +324,7 @@ const refreshAccessToken = (function(){
    * @param {Middleware next} next - Express middleware next function 
    */
   return function(oldAccessToken, req, res, next){
+    debug("-- Refreshing AccessToken --")
     if(refreshQueue[oldAccessToken]){ 
       // Debounce the call to fetch refresh token
       clearTimeout(refreshQueue[oldAccessToken].request)
@@ -346,16 +393,20 @@ function getToken(req){
 function tokenDemo(token){
   const len = token.length
   return len ? 
-        `${token.substring(0,4)}...[${len}]...${token.substring(len-4)}` :
+        `${token.substring(0,4)}..[${len}]..${token.substring(len-4)}` :
         '[No token]'
 }
 
 function formalError(msg, err){
+  return new Error(`${errorHeader}\n${msg}\n\n${err}`)
+}
+
+function formalConfigError(msg, err){
   const footer = ['Please see:\n', 
         '    https://github.com/GeoPlatform/node-gpoauth\n',
         'for more info and configuration settings.']
         .join('')
-  return new Error(`${errorHeader}\n${msg}\n${footer}\n\n`, err || {})
+  return new Error(`${errorHeader}\n${msg}\n${footer}\n\n${err}`)
 }
 
 function debug(msg){
