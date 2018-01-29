@@ -183,9 +183,6 @@ module.exports = function(app, userConf) {
 
       tokenCache.remove(accessToken)
       emitter.emit('accessTokenRevoked', jwt.decode(accessToken), accessToken);
-
-      // May want to force redirect here at some point
-      // res.redirect(`/#/login?access_token=null`);
       res.send({ status: 'ok' })
     });
   });
@@ -249,14 +246,14 @@ module.exports = function(app, userConf) {
             console.error(formalError("Error parsing user information returned from gpoauth.\nInfo retruned: " + response.body))
           } finally {
             // Send access_token to the User (browser)
-            res.redirect(`/#/login?access_token=${accessToken}&token_type=Bearer`);
+            res.redirect(`/?access_token=${accessToken}&token_type=Bearer`);
             return;
           }
         });
 
       } else {
           // Send access_token to the User (browser)
-          res.redirect(`/#/login?access_token=${accessToken}&token_type=Bearer`);
+          res.redirect(`/?access_token=${accessToken}&token_type=Bearer`);
           return
       }
 
