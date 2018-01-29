@@ -83,8 +83,8 @@ module.exports = function(app, userConf) {
 
       if (!body.secret) {
         debug("Error retrieving signature from gpoauth")
-        throw formalError(['No signature returned from gpoauth.\n' +
-                        'This likely means the APP_ID and APP_SECRET are either', 
+        throw formalConfigError(['No signature returned from gpoauth.\n' +
+                        'This likely means the APP_ID and APP_SECRET are either ', 
                         'invalid or not registed with the gpoauth server.', 
                         ].join(''),
                         error);
@@ -209,7 +209,7 @@ module.exports = function(app, userConf) {
       if (error){
         console.error(formalError("Error exchanging grant for access token (JWT)\nUser was not authenticated."))
         // Don't crash user applicaiton for this. Pass them thorugh without a token
-        res.redirect(`/#/login`);
+        res.redirect(`/#login`);
         return // end execution
       }
 
@@ -236,7 +236,7 @@ module.exports = function(app, userConf) {
           if (error) {
             console.error(formalError("Error retrieving user information."))
             // Don't crash user applicaiton for this. Pass them thorugh without a token
-            res.redirect(`/#/login`);
+            res.redirect(`/#login`);
             return // end execution
           }
           // Get user data here and emit auth event for applicaion
@@ -250,12 +250,14 @@ module.exports = function(app, userConf) {
           } finally {
             // Send access_token to the User (browser)
             res.redirect(`/#/login?access_token=${accessToken}&token_type=Bearer`);
+            return;
           }
         });
 
       } else {
           // Send access_token to the User (browser)
           res.redirect(`/#/login?access_token=${accessToken}&token_type=Bearer`);
+          return
       }
 
     });
@@ -319,6 +321,19 @@ const refreshAccessToken = (function(){
   const refresh = require('passport-oauth2-refresh');
   const delay = 200; // debounce delay
 
+  function sendRefreshErrorEvent(err, req, res, next){
+    if(emitter.listenerCount('errorRefreshingAccessToken') > 0){
+      const eventError = {
+        error: new Error(errorHeader + "Unable to exchange RefreshToken for new AccessToken"),
+        idpError: err
+      }
+      emitter.emit('errorRefreshingAccessToken', eventError, req, res, next);
+    } else {
+      // Default behavior is to redirect to login if no handler registered
+      emitter.emit('unauthorizedRequest', err, req, res, next);
+    }
+  }
+
   /**
    * The function assigned to refreshAccessToken. This is the callable 
    * function.
@@ -329,7 +344,7 @@ const refreshAccessToken = (function(){
    * @param {Middleware next} next - Express middleware next function 
    */
   return function(oldAccessToken, req, res, next){
-    debug("-- Refreshing AccessToken --")
+    debug("-- Attempting AccessToken Refresh --")
     if(refreshQueue[oldAccessToken]){ 
       // Debounce the call to fetch refresh token
       clearTimeout(refreshQueue[oldAccessToken].request)
@@ -344,44 +359,40 @@ const refreshAccessToken = (function(){
     let refreshQueueRecord = refreshQueue[oldAccessToken]
     const oldRefreshToken = tokenCache.getRefreshToken(oldAccessToken)
 
-    refreshQueueRecord.request = setTimeout(() => {
-      refresh.requestNewAccessToken('gpoauth', oldRefreshToken, (err, newAccessToken, newRefreshToken) => {
-        if(!err && newAccessToken){
-          debug("==== New Token ====")
-          debug('|| Access:  ' + tokenDemo(newAccessToken))
-          debug('|| Refresh: ' + tokenDemo(newRefreshToken))
-          debug("===================")
+    if (!!oldRefreshToken) {
+      // Go ahead an fetch new AccessToken
+      refreshQueueRecord.request = setTimeout(() => {
+        refresh.requestNewAccessToken('gpoauth', oldRefreshToken, (err, newAccessToken, newRefreshToken) => {
+          if(!err && newAccessToken){
+            debug("==== New Token ====")
+            debug('|| Access:  ' + tokenDemo(newAccessToken))
+            debug('|| Refresh: ' + tokenDemo(newRefreshToken))
+            debug("===================")
 
+            // Send new AccessToken back to the browser though the Athorization header
+            res.header('Authorization', 'Bearer ' + newAccessToken);
 
-          // Send new AccessToken back to the browser though the Athorization header
-          res.header('Authorization', 'Bearer ' + newAccessToken);
+            // Remove old & add new refreshTokens to cache.
+            tokenCache.remove(oldAccessToken);
+            tokenCache.add(newAccessToken, newRefreshToken);
 
-          // Remove old & add new refreshTokens to cache.
-          tokenCache.remove(oldAccessToken);
-          tokenCache.add(newAccessToken, newRefreshToken);
+            // Continue requests that are waiting and remove queue
+            refreshQueueRecord.queue.map(next => next(err)) // pass processing to all requests
+            delete refreshQueue[oldAccessToken];
 
-        } else {
-          debug("=== Error on refresh token: ===");
-          debug(err)
-
-          if(emitter.listenerCount('errorRefreshingAccessToken') > 0){
-            const eventError = {
-              error: new Error(errorHeader + "Unable to exchange RefreshToken for new AccessToken"),
-              idpError: err
-            }
-            emitter.emit('errorRefreshingAccessToken', eventError, req, res, next);
           } else {
-            // Default behavior is to redirect to login if no handler registered
-            res.redirect(`/login`);
+            debug("=== Error on refresh token: ===");
+            debug(err.message)
+            sendRefreshErrorEvent(err, req, res, next);
           }
-        }
 
-        // Continue requests that are waiting and remove queue
-        refreshQueueRecord.queue.map(next => next(err)) // pass processing to all requests
-        delete refreshQueue[oldAccessToken];
+        })
+      }, delay);
 
-      })
-    }, delay);
+    } else {
+      debug(`Error on refresh token: No valid refresh token found for accessToken ${tokenDemo(oldAccessToken)}`);
+      sendRefreshErrorEvent(null, req, res, next)
+    }
 
   }
 })();
@@ -409,7 +420,7 @@ function formalError(msg, err){
 function formalConfigError(msg, err){
   const footer = ['Please see:\n', 
         '    https://github.com/GeoPlatform/node-gpoauth\n',
-        'for more info and configuration settings.']
+        'for examples and information on configuration settings.']
         .join('')
   return new Error(`${errorHeader}\n${msg}\n${footer}\n\n${err}`)
 }

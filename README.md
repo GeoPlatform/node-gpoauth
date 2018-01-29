@@ -8,6 +8,7 @@ Node-gpoauth does the following things:
 - Automatically direct user to IDP for authentication
 - Setup endpoints on your application for redirecting users for Authentication and communicating with gpoauth IDP
 - Fetch Bearer token (JWT) and pass it to the browser (user)
+- Automatically refresh expired tokens (JWTs) and send them to the client via a Bearer token in the Authorization header
 - Validate (server side) JWT signature against IA application secret for each request
 - Emit important authentication events to hosting application
 
@@ -117,6 +118,35 @@ The following events are emitted from the module that allow the hosting Applicat
 >    // Allow static assets to be served without a valid JWT
 >    next();
 >  }
+>})
+>```
+---
+> ## errorRefreshingAccessToken (optional)
+> This event is called when node-gpoauth was not able to successfully refresh an accessToken. This usually happnens when either node-gpoauth does not have a refreshToken associated to the accessToken or when the gpoauth server refused to grant another access token.
+>
+>**NOTE:**   
+>By default, if this event is not implemented the request will be treated as a regular unauthenticaedRequest and will be handeled by that event.
+>
+>**Parameters:**
+>
+>| Name | Type | Description |
+>|---|---|---|
+>|err | Error | The error encountered when validating the JWT. |
+>|req | ExpressJS Request | The ExpressJS Requests object. |
+>|res | ExpressJS Response | The ExpressJS Response object. |
+>|next| Function | ExpressJS middleware next function. This function must be called for the application to continue with the middleware calls. Calling this function will allow a passthrough and Express will continue with serving the request|
+>
+>
+>**Example:**
+>```javascript
+>IDP.on('errorRefreshingAccessToken', (err, req, res, next) => {
+>  if(/*allowRequest*/) {
+>    next();
+>  } else {
+>    res.status(401).send({ 
+>      err: "Refresh token expired, unable to complete request." 
+>    })
+>  } 
 >})
 >```
 ---
