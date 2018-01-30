@@ -68,7 +68,7 @@ module.exports = function(app, userConf) {
     function(error, response, rawBody) {
       if(error) { 
         debug("Error retrieving signature from gpoauth")
-        throw formalError(['Not able to connect to gpoauth and fetch signature for JWT validation\n',
+        throw formalConfigError(['Not able to connect to gpoauth and fetch signature for JWT validation\n',
                   'Please check your settings passed to node-gpoauth and that the gpoauth server is running.\n',
                   ].join(''),
                   error);
@@ -77,8 +77,9 @@ module.exports = function(app, userConf) {
       try{
         var body = JSON.parse(rawBody)
       } catch(err){
-        console.error('Was not to parse signature from gpoauth.')
-        throw err
+        debug("Error parsing signature response")
+        debug(rawBody)
+        throw formalConfigError('Was not to parse signature from gpoauth.\n', 'This likely means the APP_ID and APP_SECRET are incorrect.')
       }
 
       if (!body.secret) {
