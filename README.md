@@ -40,7 +40,7 @@ const nodeGpoauth = require('node-gpoauth')
 // IDP (gpoauth) =========================================
 const config = {
     IDP_BASE_URL: "http://gpoauth.gov",
-    APP_ID: "000",
+    APP_ID: "5a720833cf282142f97d7f04",
     APP_SECRET: "KILTjRrzRhitJY5CRW56s9owDEMtYCldAj4IE6NxwN",
     APP_BASE_URL: "http://coolapp.com"
   }
@@ -71,16 +71,16 @@ The following are the fields that can be on the configurartion object sent to no
 | Field | Type | Description| Example |
 |---|---|---|---|
 |IDP_BASE_URL| sring | The base domain for the IDP sevice | https://idp.geoplatform.gov|
-|APP_ID | string | The Application ID as it was registerd with the IDP service | 105 |
+|APP_ID | string | The Application ID as it was registerd with the IDP service | 5a720833cf282142f97d7f04 |
 |APP_SECRET | string | The Application secret that was generated with the Application was  regestered with the IDP | KILTjRrzRhitJY5CRW56s9owDEMtYCldAj4IE6NxwN |
 |APP_BASE_URL | string | Base URL of the application hosted where this module is being used. This is used for redirecting the user back to your application once they have authenticated. | http://map.geoplatform.gov |
 
 ### Optional Fields
 
-| Field | Type | Description| Example |
-|---|---|---|---|
-|SERVICE_NAME| string | The name of the Application hosting this module | Map_Service|
-|DEBUG| boolean | If true print out debug information from node-gpoauth | true|
+| Field | Type | Description| Default |
+|---|---|---|---|---|
+|REFRESH_DEBOUNCE| int | Milliseconds to delay the request for a refresh token. This will allow requests to queue and all return at once when the token has been succesfully refreshed. | 200 |
+|AUTH_DEBUG| boolean | If true print out debug information from node-gpoauth | false |
 
 <br><br>
 
@@ -105,19 +105,19 @@ The following events are emitted from the module that allow the hosting Applicat
 >
 >**Example:**
 >```javascript
+>// Determine the endpoints that require a valid JWT
 >IDP.on('unauthorizedRequest', (err, req, res, next) => {
 >
->  // Determine the endpoints that require a valid JWT
+>  // protect API endpoint from unauthenticated users
 >  if(req.originalUrl.match(/api\/.+/)) {
->    // protect API endpoint from unauthenticated users
 >    res.status(401).send({
 >      error: 'Unauthenticated'
 >    })
->
 >  } else {
 >    // Allow static assets to be served without a valid JWT
 >    next();
 >  }
+>
 >})
 >```
 ---

@@ -6,7 +6,7 @@ let tokenCache = require('./tokenCache.js');
 class MyEmitter extends require('events') {}
 const emitter = new MyEmitter();
 const errorHeader = `========[ node-gpoauth error ]=========\n`
-let DEBUG; // set when config passed in
+let CONFIG;
 
 /**
  * oauth module
@@ -38,30 +38,31 @@ module.exports = function(app, userConf) {
    */
 
   // Combine userConfig and constants for full config
-  const config = Object.assign({}, {
+  CONFIG = Object.assign({
     IDP_TOKEN_URL: "/auth/token",
     IDP_AUTH_URL: '/auth/authorize',
     AUTH_TYPE: "grant",
     CALLBACK: "http://localhost:3456/authtoken",
-    SCOPES: 'read'
+    SCOPES: 'read',
+    REFRESH_DEBOUNCE: 250 // debounce delay
   }, userConf)
 
-  DEBUG = config.DEBUG
-  debug('Debugger enabled')
+  debug(' ======== Debugger enabled ======== ')
+  debug('Config: ', CONFIG)
 
   // Create the passport setup
-  const passport = require('./passport.js')(config);
+  const passport = require('./passport.js')(CONFIG);
 
 
   /********* Signature Verification *********/
   let oauth_signature = '';
   debug("-- Fetching signature from gpoauth (for verifying JWTs) -- ")
-  request.post(config.IDP_BASE_URL + '/api/signature',
+  request.post(CONFIG.IDP_BASE_URL + '/api/signature',
     // POST data
     {
       form: {
-        client_id: config.APP_ID,
-        client_secret: config.APP_SECRET
+        client_id: CONFIG.APP_ID,
+        client_secret: CONFIG.APP_SECRET
       }
     }, 
     // Handler
@@ -173,7 +174,7 @@ module.exports = function(app, userConf) {
 
     // Make the call to revoke the token
     request({
-      uri: config.IDP_BASE_URL + '/auth/revoke',
+      uri: CONFIG.IDP_BASE_URL + '/auth/revoke',
       method: 'GET',
       headers: { 'Authorization': 'Bearer ' + accessToken }
     }, function(error, response) {
@@ -193,14 +194,14 @@ module.exports = function(app, userConf) {
    */
   app.get('/authtoken', (req, res) => {
     const oauth = {
-      client_id: config.APP_ID,
-      client_secret: config.APP_SECRET,
+      client_id: CONFIG.APP_ID,
+      client_secret: CONFIG.APP_SECRET,
       grant_type: "authorization_code",
       code: req.query.code
     };
 
     request({
-      uri: config.IDP_BASE_URL + config.IDP_TOKEN_URL,
+      uri: CONFIG.IDP_BASE_URL + CONFIG.IDP_TOKEN_URL,
       method: 'POST',
       json: oauth
     }, function(error, response) {
@@ -216,18 +217,14 @@ module.exports = function(app, userConf) {
 
       // cache the refreshToken
       tokenCache.add(accessToken, refreshToken)
-
-      if(DEBUG){
-        debug("User Authenticated - JWT:")
-        console.log(jwt.decode(accessToken))
-      }
+        debug("User Authenticated - JWT:", jwt.decode(accessToken))
 
       // Call again to get user data and notifiy application that user has authenticated
       if(emitter.listenerCount('userAuthenticated') > 0){
 
         // TODO: Should avoid callback hell here...
         request({
-          uri: config.IDP_BASE_URL + '/api/profile',
+          uri: CONFIG.IDP_BASE_URL + '/api/profile',
           method: 'GET',
           headers: { 'Authorization': 'Bearer ' + accessToken }
         }, function(error, response) {
@@ -266,8 +263,6 @@ module.exports = function(app, userConf) {
   /*** Expose Events so application can subscribe ***/
   return emitter;
 };
-
-
 
 
 // ===== Helper functions ===== //
@@ -317,7 +312,6 @@ const refreshAccessToken = (function(){
    */
   let refreshQueue = {}
   const refresh = require('passport-oauth2-refresh');
-  const delay = 200; // debounce delay
 
   function sendRefreshErrorEvent(err, req, res, next){
     if(emitter.listenerCount('errorRefreshingAccessToken') > 0){
@@ -342,7 +336,6 @@ const refreshAccessToken = (function(){
    * @param {Middleware next} next - Express middleware next function 
    */
   return function(oldAccessToken, req, res, next){
-    debug("-- Attempting AccessToken Refresh --")
     if(refreshQueue[oldAccessToken]){ 
       // Debounce the call to fetch refresh token
       clearTimeout(refreshQueue[oldAccessToken].request)
@@ -360,12 +353,13 @@ const refreshAccessToken = (function(){
     if (!!oldRefreshToken) {
       // Go ahead an fetch new AccessToken
       refreshQueueRecord.request = setTimeout(() => {
+        debug("-- Attempting AccessToken Refresh --")
         refresh.requestNewAccessToken('gpoauth', oldRefreshToken, (err, newAccessToken, newRefreshToken) => {
           if(!err && newAccessToken){
-            debug("==== New Token ====")
+            debug("======= New Token =======")
             debug('|| Access:  ' + tokenDemo(newAccessToken))
             debug('|| Refresh: ' + tokenDemo(newRefreshToken))
-            debug("===================")
+            debug("=========================")
 
             // Send new AccessToken back to the browser though the Athorization header
             res.header('Authorization', 'Bearer ' + newAccessToken);
@@ -385,7 +379,7 @@ const refreshAccessToken = (function(){
           }
 
         })
-      }, delay);
+      }, CONFIG.REFRESH_DEBOUNCE);
 
     } else {
       debug(`Error on refresh token: No valid refresh token found for accessToken ${tokenDemo(oldAccessToken)}`);
@@ -423,10 +417,7 @@ function formalConfigError(msg, err){
   return new Error(`${errorHeader}\n${msg}\n${footer}\n\n${err}`)
 }
 
-function debug(msg){
-  if(DEBUG){
-    const prefix = `[node-gpoauth ${(new Date()).toLocaleTimeString()}] `
-    console.log(prefix + msg)
-  }
-  // else do nothing
+function debug(){
+  if(CONFIG.AUTH_DEBUG)
+    console.log.apply(this, [`[node-gpoauth ${(new Date()).toLocaleTimeString()}] `].concat(Array.prototype.slice.call(arguments)))
 }
