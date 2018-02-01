@@ -314,6 +314,10 @@ const refreshAccessToken = (function(){
   const refresh = require('passport-oauth2-refresh');
 
   function sendRefreshErrorEvent(err, req, res, next){
+    // Send empty Bearer token to client to clear the expired JWT
+    res.header('Authorization', 'Bearer ');
+
+    // Inform the application
     if(emitter.listenerCount('errorRefreshingAccessToken') > 0){
       const eventError = {
         error: new Error(errorHeader + "Unable to exchange RefreshToken for new AccessToken"),
