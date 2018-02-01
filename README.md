@@ -78,7 +78,7 @@ The following are the fields that can be on the configurartion object sent to no
 ### Optional Fields
 
 | Field | Type | Description| Default |
-|---|---|---|---|---|
+|---|---|---|---|
 |REFRESH_DEBOUNCE| int | Milliseconds to delay the request for a refresh token. This will allow requests to queue and all return at once when the token has been succesfully refreshed. | 200 |
 |AUTH_DEBUG| boolean | If true print out debug information from node-gpoauth | false |
 
