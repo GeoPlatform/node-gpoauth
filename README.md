@@ -85,71 +85,17 @@ The following are the fields that can be on the configurartion object sent to no
 <br><br>
 
 ## Events
-The following events are emitted from the module that allow the hosting Application to respond to IDP events. See the Usage section for an example of seting up an event handler. Avaliable events are:
-  
-> ## unauthorizedRequest (required)
-> This event is called with an unauthorized request is made to your application. It will only be called in the event that the client (browser) making the request does not have a valid JWT. Depending on how your application is set up you may want to filter only some requests. For example, if your application servers both static assets as well as an API you will only want to limit access to the API. You application is required to implement a handler for this event. If there is no registered event handler for this event node-gpoauth will throw and error.
->
->**NOTE:**   
->Failing to either call the next funcation or send a response to the client will cause the application to hang as Express will not continue processing the request middleware.
->
->**Parameters:**
->
->| Name | Type | Description |
->|---|---|---|
->|err | Error | The error encountered when validating the JWT. |
->|req | ExpressJS Request | The ExpressJS Requests object. |
->|res | ExpressJS Response | The ExpressJS Response object. |
->|next| Function | ExpressJS middleware next function. This function must be called for the application to continue with the middleware calls. Calling this function will allow a passthrough and Express will continue with serving the request|
->
->
->**Example:**
->```javascript
->// Determine the endpoints that require a valid JWT
->IDP.on('unauthorizedRequest', (err, req, res, next) => {
->
->  // protect API endpoint from unauthenticated users
->  if(req.originalUrl.match(/api\/.+/)) {
->    res.status(401).send({
->      error: 'Unauthenticated'
->    })
->  } else {
->    // Allow static assets to be served without a valid JWT
->    next();
->  }
->
->})
->```
----
-> ## errorRefreshingAccessToken (optional)
-> This event is called when node-gpoauth was not able to successfully refresh an accessToken. This usually happnens when either node-gpoauth does not have a refreshToken associated to the accessToken or when the gpoauth server refused to grant another access token.
->
->**NOTE:**   
->By default, if this event is not implemented the request will be treated as a regular unauthenticaedRequest and will be handeled by that event.
->
->**Parameters:**
->
->| Name | Type | Description |
->|---|---|---|
->|err | Error | The error encountered when validating the JWT. |
->|req | ExpressJS Request | The ExpressJS Requests object. |
->|res | ExpressJS Response | The ExpressJS Response object. |
->|next| Function | ExpressJS middleware next function. This function must be called for the application to continue with the middleware calls. Calling this function will allow a passthrough and Express will continue with serving the request|
->
->
->**Example:**
->```javascript
->IDP.on('errorRefreshingAccessToken', (err, req, res, next) => {
->  if(/*allowRequest*/) {
->    next();
->  } else {
->    res.status(401).send({ 
->      err: "Refresh token expired, unable to complete request." 
->    })
->  } 
->})
->```
----
+The following events are emitted from the module that allow the hosting Application to respond to IDP events. See the Usage section for an example of seting up an event handler. Only the **unauthorizedRequest** event handler is required to be implemented. See below for a full description of each event.
+
+Avaliable events are:
+  - userAuthenticated (optional)
+  - unauthorizedRequest (**required**)
+  - accessGranted (optional)
+  - errorRefreshingAccessToken (optional)
+  - accessTokenRevoked (optional)
+<br>
+<br>
+
 
 >## userAuthenticated (optional)
 >Event that is fired when a user is authenticated to IDP through your application. The event will only fire when a user completes the redirect back to your application after logging into the IDP (it will not happen per request for already authenticted users). This event is useful for creating a user in your system (or linking an existing user in your system) with an IDP user.  
@@ -186,6 +132,107 @@ The following events are emitted from the module that allow the hosting Applicat
 >  }
 >})
 >```
+
+---
+
+> ## unauthorizedRequest (required)
+> This event is called with an unauthorized request is made to your application. It will only be called in the event that the client (browser) making the request does not have a valid JWT. Depending on how your application is set up you may want to filter only some requests. For example, if your application servers both static assets as well as an API you will only want to limit access to the API. You application is required to implement a handler for this event. If there is no registered event handler for this event node-gpoauth will throw and error.
+>
+>**NOTE:**   
+>Failing to either call the next funcation or send a response to the client will cause the application to hang as Express will not continue processing the request middleware.
+>
+>**Parameters:**
+>
+>| Name | Type | Description |
+>|---|---|---|
+>|err | Error | The error encountered when validating the JWT. |
+>|req | ExpressJS Request | The ExpressJS Requests object. |
+>|res | ExpressJS Response | The ExpressJS Response object. |
+>|next| Function | ExpressJS middleware next function. This function must be called for the application to continue with the middleware calls. Calling this function will allow a passthrough and Express will continue with serving the request|
+>
+>
+>**Example:**
+>```javascript
+>// Determine the endpoints that require a valid JWT
+>IDP.on('unauthorizedRequest', (err, req, res, next) => {
+>
+>  // protect API endpoint from unauthenticated users
+>  if(req.originalUrl.match(/api\/.+/)) {
+>    res.status(401).send({
+>      error: 'Unauthenticated'
+>    })
+>  } else {
+>    // Allow static assets to be served without a valid JWT
+>    next();
+>  }
+>
+>})
+>```
+---
+> ## accessGranted (optional)
+> This event is called when a user has a valid JWT and are about to be passed on for reqular request processing. This event can be used as a kind of catch all middleware for more granular access control based on the user requesting the resource. The JWT can be accessed via req.jwt and user information can then be used to futher restrict access to resources. (See example below).
+>
+>**NOTE:**   
+>By default, if this event is not implemented the request will be treated as a regular request.
+>
+>**Parameters:**
+>
+>| Name | Type | Description |
+>|---|---|---|
+>|req | ExpressJS Request | The ExpressJS Requests object. |
+>|res | ExpressJS Response | The ExpressJS Response object. |
+>|next| Function | ExpressJS middleware next function. This function must be called for the application to continue with the middleware calls. Calling this function will allow a passthrough and Express will continue with serving the request|
+>
+>
+>**Example:**
+>```javascript
+>IDP.on('accessGranted', (req, res, next) => {
+>  // Extract user info from JWT
+>  const USER = req.jwt;
+>  // Get names of Groups user is in
+>  const GROUPS = USER.groups.map(g => g.name)
+>
+>  // Only allow admins to access resources at the admin endpoints
+>  if(GROUPS.indexOf('admin') === -1) {
+>    res.status(401).send({ 
+>      err: "Only admin users are able to access this endpoint." 
+>    })
+>  } else {
+>    next();
+>  } 
+>})
+>```
+
+---
+> ## errorRefreshingAccessToken (optional)
+> This event is called when node-gpoauth was not able to successfully refresh an accessToken. This usually happnens when either node-gpoauth does not have a refreshToken associated to the accessToken or when the gpoauth server refused to grant another access token.
+>
+>**NOTE:**   
+>By default, if this event is not implemented the request will be treated as a regular unauthenticaedRequest and will be handeled by that event.
+>
+>**Parameters:**
+>
+>| Name | Type | Description |
+>|---|---|---|
+>|err | Error | The error encountered when validating the JWT. |
+>|req | ExpressJS Request | The ExpressJS Requests object. |
+>|res | ExpressJS Response | The ExpressJS Response object. |
+>|next| Function | ExpressJS middleware next function. This function must be called for the application to continue with the middleware calls. Calling this function will allow a passthrough and Express will continue with serving the request|
+>
+>
+>**Example:**
+>```javascript
+>IDP.on('errorRefreshingAccessToken', (err, req, res, next) => {
+>  if(/*allowRequest*/) {
+>    next();
+>  } else {
+>    res.status(401).send({ 
+>      err: "Refresh token expired, unable to complete request." 
+>    })
+>  } 
+>})
+>```
+
 ---
 
 >## accessTokenRevoked (optional)

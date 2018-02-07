@@ -115,7 +115,11 @@ module.exports = function(app, userConf) {
       req.jwt = decoded
         debug(`Access Granted - Token: ${tokenDemo(accessToken)} | Resource: ${req.originalUrl}`)
 
-      next();
+      if(emitter.listenerCount('accessGranted') > 0){
+        emitter.emit('accessGranted', req, res, next);
+      } else {
+        next();
+      }
 
     } catch(err) {
 
