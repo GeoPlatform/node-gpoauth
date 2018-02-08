@@ -82,7 +82,36 @@ The following are the fields that can be on the configurartion object sent to no
 |REFRESH_DEBOUNCE| int | Milliseconds to delay the request for a refresh token. This will allow requests to queue and all return at once when the token has been succesfully refreshed. | 200 |
 |AUTH_DEBUG| boolean | If true print out debug information from node-gpoauth | false |
 
-<br><br>
+<br>
+
+## JWT
+Gpoauth passes user data around using JWTs (for more info on JWTs see: https://jwt.io/introduction/). The JWT carries basic user information from gpoauth. A gpoauth JWT will holds the following format:
+```javascript
+{ 
+  sub: '5a7b3cb5113cb7001d0cd635',            // userId
+  name: 'Built-In Admin',                     // full name of user
+  email: 'admin@example.com',
+  username: 'admin',
+  roles: 'admin',                          
+  groups: [                                   // Groups (Roles) a user has/is in
+     { _id: '5a7b3cb5113cb7001d0cd63a', name: 'Administrators' },
+     { _id: '5a7b3cb5113cb7001d0cd639', name: 'Users' } 
+  ],
+  orgs: [                                     // Users organiztion
+    { id: '5a7b3cb5113cb7001d0cd238', name: 'Image Matters, LLC' }
+  ],
+  scope: [ 'read' ],
+  iss: 'https://localhost.local',
+  aud: '5a7b3d9e113cb7001d0cd644',
+  nonce: 'not implement',
+  iat: 1518120742,
+  exp: 1518122542 
+}
+
+```
+The JWT is made avaliable in all node-gpoauth events via the req.jwt property.
+
+<br>
 
 ## Events
 The following events are emitted from the module that allow the hosting Application to respond to IDP events. See the Usage section for an example of seting up an event handler. Only the **unauthorizedRequest** event handler is required to be implemented. See below for a full description of each event.
@@ -170,7 +199,7 @@ Avaliable events are:
 >```
 ---
 > ## accessGranted (optional)
-> This event is called when a user has a valid JWT and are about to be passed on for reqular request processing. This event can be used as a kind of catch all middleware for more granular access control based on the user requesting the resource. The JWT can be accessed via req.jwt and user information can then be used to futher restrict access to resources. (See example below).
+> This event is called when a user has a valid JWT and are about to be passed on for regular request processing. This event can be used as a kind of catch all middleware for more granular access control based on the user requesting the resource. The JWT can be accessed via req.jwt and user information can then be used to futher restrict access to resources. (See example below).
 >
 >**NOTE:**   
 >By default, if this event is not implemented the request will be treated as a regular request.
