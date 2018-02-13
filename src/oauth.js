@@ -113,6 +113,7 @@ module.exports = function(app, userConf) {
     try {
       const decoded = jwt.verify(accessToken, oauth_signature); 
       req.jwt = decoded
+      req.accessToken = accessToken
         debug(`Access Granted - Token: ${tokenDemo(accessToken)} | Resource: ${req.originalUrl}`)
 
       if(emitter.listenerCount('accessGranted') > 0){
