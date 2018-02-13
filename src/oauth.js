@@ -114,7 +114,7 @@ module.exports = function(app, userConf) {
       const decoded = jwt.verify(accessToken, oauth_signature); 
       req.jwt = decoded
       req.accessToken = accessToken
-        debug(`Access Granted - Token: ${tokenDemo(accessToken)} | Resource: ${req.originalUrl}`)
+        debug(`Access Granted - Token: ${tokenDemo(accessToken)} | ${req.method} - ${req.originalUrl}`)
 
       if(emitter.listenerCount('accessGranted') > 0){
         emitter.emit('accessGranted', req, res, next);
@@ -138,7 +138,7 @@ module.exports = function(app, userConf) {
 
       // Call the listener 'unauthorizedRequest' handler if registered
       } else if(emitter.listenerCount('unauthorizedRequest') > 0){
-        debug(`unauthorizedRequest - Token: ${tokenDemo(accessToken)} | Resource: ${req.originalUrl}`)
+        debug(`Unauthorized Request - Token: ${tokenDemo(accessToken)} | ${req.method} - ${req.originalUrl}`)
         emitter.emit('unauthorizedRequest', err, req, res, next);
 
       // Require 'unauthorizedRequest' event handler inside hosting application

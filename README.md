@@ -82,6 +82,16 @@ The following are the fields that can be on the configurartion object sent to no
 |REFRESH_DEBOUNCE| int | Milliseconds to delay the request for a refresh token. This will allow requests to queue and all return at once when the token has been succesfully refreshed. | 200 |
 |AUTH_DEBUG| boolean | If true print out debug information from node-gpoauth | false |
 
+<br><br>
+
+## Properties set on "req" object
+The JWT and accessToken (encoded JWT) are made avaliable in all authorized node-gpoauth requests. These will not be set on unauthorized requests. The properties are:
+
+|Property|Description|
+|---|---|
+|req.jwt | The parsed JWT object (See example below) with user related information. |
+|req.accessToken| The raw encoded JWT passed back from gpoauth. This accessToken will be required for authentication from any other service requiring a JWT/token for accessing resources.|
+
 <br>
 
 ## JWT
@@ -109,7 +119,7 @@ Gpoauth passes user data around using JWTs (for more info on JWTs see: https://j
 }
 
 ```
-The JWT is made avaliable in all node-gpoauth events via the req.jwt property.
+
 
 <br>
 
