@@ -47,6 +47,9 @@ module.exports = function(app, userConf) {
     REFRESH_DEBOUNCE: 250 // debounce delay
   }, userConf)
 
+  // Default is to pass strings :(
+  CONFIG.AUTH_DEBUG = userConf.AUTH_DEBUG === 'true' || userConf.AUTH_DEBUG === true
+
   debug(' ======== Debugger enabled ======== ')
   debug('Config: ', CONFIG)
 
@@ -114,7 +117,7 @@ module.exports = function(app, userConf) {
       const decoded = jwt.verify(accessToken, oauth_signature); 
       req.jwt = decoded
       req.accessToken = accessToken
-        debug(`Access Granted - Token: ${tokenDemo(accessToken)} | ${req.method} - ${req.originalUrl}`)
+        logRequest('Access Granted', accessToken, req)
 
       if(emitter.listenerCount('accessGranted') > 0){
         emitter.emit('accessGranted', req, res, next);
@@ -133,12 +136,12 @@ module.exports = function(app, userConf) {
 
         // Automatically do the refresh if token has expired 
       } else if (err instanceof jwt.TokenExpiredError) {
-        debug(`Expired token used: ${tokenDemo(accessToken)}`)
+        logRequest('Expired token used', accessToken, req)
         refreshAccessToken(accessToken, req, res, next);
 
       // Call the listener 'unauthorizedRequest' handler if registered
       } else if(emitter.listenerCount('unauthorizedRequest') > 0){
-        debug(`Unauthorized Request - Token: ${tokenDemo(accessToken)} | ${req.method} - ${req.originalUrl}`)
+        logRequest('Unauthorized Request', accessToken, req)
         emitter.emit('unauthorizedRequest', err, req, res, next);
 
       // Require 'unauthorizedRequest' event handler inside hosting application
@@ -155,6 +158,7 @@ module.exports = function(app, userConf) {
       }
     }
   }
+
 
   // ======== Setup middleware ======== //
   app.use(verifyJWT);
@@ -198,6 +202,7 @@ module.exports = function(app, userConf) {
    * Endpoint for exchanging a grantcode for an accessToken
    */
   app.get('/authtoken', (req, res) => {
+
     const oauth = {
       client_id: CONFIG.APP_ID,
       client_secret: CONFIG.APP_SECRET,
@@ -263,6 +268,7 @@ module.exports = function(app, userConf) {
     });
   });
 
+  app.get('/checktoken', (req, res, next) => res.send({status: "something"}));
 
 
   /*** Expose Events so application can subscribe ***/
@@ -362,7 +368,7 @@ const refreshAccessToken = (function(){
     if (!!oldRefreshToken) {
       // Go ahead an fetch new AccessToken
       refreshQueueRecord.request = setTimeout(() => {
-        debug("-- Attempting AccessToken Refresh --")
+        debug(`-- Attempting AccessToken Refresh - Token: ${tokenDemo(oldAccessToken)} --`)
         refresh.requestNewAccessToken('gpoauth', oldRefreshToken, (err, newAccessToken, newRefreshToken) => {
           if(!err && newAccessToken){
             debug("======= New Token =======")
@@ -424,6 +430,10 @@ function formalConfigError(msg, err){
         'for examples and information on configuration settings.']
         .join('')
   return new Error(`${errorHeader}\n${msg}\n${footer}\n\n${err}`)
+}
+
+function logRequest(status, token, req){
+  debug(`${status} - Token: ${tokenDemo(token)} | ${req.method} - ${req.originalUrl}`)
 }
 
 function debug(){
