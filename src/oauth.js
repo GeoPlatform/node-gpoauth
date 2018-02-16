@@ -171,9 +171,96 @@ module.exports = function(app, userConf) {
    * 
    * Logs a user in through IDP
    */
-  app.get('/login', passport.authenticate('gpoauth', {
-    session: true
-  }), (req, res, next) => {});
+  app.get('/login', (req, res, next) => {
+    const redirectURL = req.query.redirect_url ? 
+                          encodeURIComponent(req.query.redirect_url) :
+                          '';
+    passport.authenticate('gpoauth', {
+      session: true,
+      callbackURL: `/authtoken/${redirectURL}`
+    })(req, res, next)
+  });
+
+  /*
+   * Endpoint for exchanging a grantcode for an accessToken
+   */
+  app.get('/authtoken/:redirectURL', (req, res) => {
+    const URL = req.params.redirectURL ? 
+                decodeURIComponent(req.params.redirectURL) :
+                '/#login';
+
+    const oauth = {
+      client_id: CONFIG.APP_ID,
+      client_secret: CONFIG.APP_SECRET,
+      grant_type: "authorization_code",
+      code: req.query.code
+    };
+
+    request({
+      uri: CONFIG.IDP_BASE_URL + CONFIG.IDP_TOKEN_URL,
+      method: 'POST',
+      json: oauth
+    }, function(error, response) {
+      if (error){
+        console.error(formalError("Error exchanging grant for access token (JWT)\nUser was not authenticated."))
+        // Don't crash user applicaiton for this. Pass them thorugh without a token
+        res.redirect(URL);
+        return // end execution
+      }
+
+      const accessToken = response.body.access_token;
+      const refreshToken = response.body.refresh_token;
+
+      // cache the refreshToken
+      tokenCache.add(accessToken, refreshToken)
+        debug("User Authenticated - JWT:", jwt.decode(accessToken))
+
+      // Call again to get user data and notifiy application that user has authenticated
+      if(emitter.listenerCount('userAuthenticated') > 0){
+
+        // TODO: Should avoid callback hell here...
+        request({
+          uri: CONFIG.IDP_BASE_URL + '/api/profile',
+          method: 'GET',
+          headers: { 'Authorization': 'Bearer ' + accessToken }
+        }, function(error, response) {
+          if (error) {
+            console.error(formalError("Error retrieving user information."))
+            // Don't crash user applicaiton for this. Pass them thorugh without a token
+            res.redirect(URL);
+            return // end execution
+          }
+          // Get user data here and emit auth event for applicaion
+          try{
+            const user = JSON.parse(response.body);
+            debug("User profile retrieved.")
+            emitter.emit('userAuthenticated', user);
+
+          } catch(e) {
+            console.error(formalError("Error parsing user information returned from gpoauth.\nInfo retruned: " + response.body))
+          } finally {
+            // Send access_token to the User (browser)
+            sendToken(res, URL, accessToken)
+            return;
+          }
+        });
+
+      } else {
+          // Send access_token to the User (browser)
+          sendToken(res, URL, accessToken)
+          return
+      }
+
+
+
+    });
+  });
+
+  /**
+   * Simlple check endpoint that will be caught by middleware and allow for 
+   * token refreshing.
+   */
+  app.get('/checktoken', (req, res, next) => res.send({status: "something"}));
 
   /**
    * Call to revoke (logout) on the gpoauth server
@@ -197,79 +284,6 @@ module.exports = function(app, userConf) {
       res.send({ status: 'ok' })
     });
   });
-
-  /*
-   * Endpoint for exchanging a grantcode for an accessToken
-   */
-  app.get('/authtoken', (req, res) => {
-
-    const oauth = {
-      client_id: CONFIG.APP_ID,
-      client_secret: CONFIG.APP_SECRET,
-      grant_type: "authorization_code",
-      code: req.query.code
-    };
-
-    request({
-      uri: CONFIG.IDP_BASE_URL + CONFIG.IDP_TOKEN_URL,
-      method: 'POST',
-      json: oauth
-    }, function(error, response) {
-      if (error){
-        console.error(formalError("Error exchanging grant for access token (JWT)\nUser was not authenticated."))
-        // Don't crash user applicaiton for this. Pass them thorugh without a token
-        res.redirect(`/#login`);
-        return // end execution
-      }
-
-      const accessToken = response.body.access_token;
-      const refreshToken = response.body.refresh_token;
-
-      // cache the refreshToken
-      tokenCache.add(accessToken, refreshToken)
-        debug("User Authenticated - JWT:", jwt.decode(accessToken))
-
-      // Call again to get user data and notifiy application that user has authenticated
-      if(emitter.listenerCount('userAuthenticated') > 0){
-
-        // TODO: Should avoid callback hell here...
-        request({
-          uri: CONFIG.IDP_BASE_URL + '/api/profile',
-          method: 'GET',
-          headers: { 'Authorization': 'Bearer ' + accessToken }
-        }, function(error, response) {
-          if (error) {
-            console.error(formalError("Error retrieving user information."))
-            // Don't crash user applicaiton for this. Pass them thorugh without a token
-            res.redirect(`/#login`);
-            return // end execution
-          }
-          // Get user data here and emit auth event for applicaion
-          try{
-            const user = JSON.parse(response.body);
-            debug("User profile retrieved.")
-            emitter.emit('userAuthenticated', user);
-
-          } catch(e) {
-            console.error(formalError("Error parsing user information returned from gpoauth.\nInfo retruned: " + response.body))
-          } finally {
-            // Send access_token to the User (browser)
-            res.redirect(`/?access_token=${accessToken}&token_type=Bearer`);
-            return;
-          }
-        });
-
-      } else {
-          // Send access_token to the User (browser)
-          res.redirect(`/?access_token=${accessToken}&token_type=Bearer`);
-          return
-      }
-
-    });
-  });
-
-  app.get('/checktoken', (req, res, next) => res.send({status: "something"}));
-
 
   /*** Expose Events so application can subscribe ***/
   return emitter;
@@ -411,6 +425,12 @@ const refreshAccessToken = (function(){
  */
 function getToken(req){
   return (req.headers.authorization || '').replace('Bearer ','');
+}
+
+function sendToken(res, URL, accessToken){
+  const prefix = URL.match(/\?/) ? '&' : '?';
+  debug(`Full URL: ${URL}${prefix}access_token=${'[...]'}&token_type=Bearer`)
+  res.redirect(`${URL}${prefix}access_token=${accessToken}&token_type=Bearer`);
 }
 
 function tokenDemo(token){
