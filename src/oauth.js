@@ -10,31 +10,31 @@ let CONFIG;
 
 /**
  * oauth module
- * 
+ *
  * Stand alone module for connecting to IDP via OAuth2.
- * 
- * This module will 
- * 
- * @param app - 
+ *
+ * This module will
+ *
+ * @param app -
  */
 module.exports = function(app, userConf) {
   const self = this;
   // validate passed in config
   validateUserConfig(userConf); // will throw err on invalid config
-  
-  /* 
+
+  /*
   * TODO: allow for a prefix for endpoints
-  * 
-  * Example: 
+  *
+  * Example:
   *  My NodeJS service uses the '[root]/login' route.
   *  Allow me to set a prefix to '/oauth' so all routes
   *  for this module are then '[root]/oauth/login' etc.
   */
-  
+
   /*
    * TODO:
-   *  We should use formal errors (seporate file) so we can 
-   *  do type checking against them in test cases. 
+   *  We should use formal errors (seporate file) so we can
+   *  do type checking against them in test cases.
    */
 
   // Combine userConfig and constants for full config
@@ -67,10 +67,10 @@ module.exports = function(app, userConf) {
         client_id: CONFIG.APP_ID,
         client_secret: CONFIG.APP_SECRET
       }
-    }, 
+    },
     // Handler
     function(error, response, rawBody) {
-      if(error) { 
+      if(error) {
         debug("Error retrieving signature from gpoauth")
         throw formalConfigError(['Not able to connect to gpoauth and fetch signature for JWT validation\n',
                   'Please check your settings passed to node-gpoauth and that the gpoauth server is running.\n',
@@ -89,8 +89,8 @@ module.exports = function(app, userConf) {
       if (!body.secret) {
         debug("Error retrieving signature from gpoauth")
         throw formalConfigError(['No signature returned from gpoauth.\n' +
-                        'This likely means the APP_ID and APP_SECRET are either ', 
-                        'invalid or not registed with the gpoauth server.', 
+                        'This likely means the APP_ID and APP_SECRET are either ',
+                        'invalid or not registed with the gpoauth server.',
                         ].join(''),
                         error);
       } else {
@@ -99,22 +99,22 @@ module.exports = function(app, userConf) {
       }
   });
 
-  
+
 
 
   /**************** Middleware ****************/
   /**
    * Middleware for vaidating a JWT passed in the Authorization Header
-   * when requesting a resource. 
-   * 
-   * This function conforms to standard Connect middleware specs. 
-   * 
+   * when requesting a resource.
+   *
+   * This function conforms to standard Connect middleware specs.
+   *
    */
   function verifyJWT(req, res, next) {
     const accessToken = getToken(req);
 
     try {
-      const decoded = jwt.verify(accessToken, oauth_signature); 
+      const decoded = jwt.verify(accessToken, oauth_signature);
       req.jwt = decoded
       req.accessToken = accessToken
         logRequest('Access Granted', accessToken, req)
@@ -128,13 +128,13 @@ module.exports = function(app, userConf) {
     } catch(err) {
 
       // Pass them through on endpoints setup by gpoauth
-      if(req.originalUrl.match('login') || 
+      if(req.originalUrl.match('login') ||
         req.originalUrl.match('authtoken') ||
         req.originalUrl.match('revoke')
       ){
         next();
 
-        // Automatically do the refresh if token has expired 
+        // Automatically do the refresh if token has expired
       } else if (err instanceof jwt.TokenExpiredError) {
         logRequest('Expired token used', accessToken, req)
         refreshAccessToken(accessToken, req, res, next);
@@ -150,8 +150,8 @@ module.exports = function(app, userConf) {
           'node-gpoauth error\n',
           'No event handler registered for the "unauthorizedRequest" event.\n',
           'Your data is not secured by gpoauth!\n\n',
-          'Please see: ', 
-          'https://github.com/GeoPlatform/node-gpoauth#unauthorizedrequest-required ', 
+          'Please see: ',
+          'https://github.com/GeoPlatform/node-gpoauth#unauthorizedrequest-required ',
           'for implementing this event handler.\n'
         ].join('')
         next(new Error(errorHeader + msg)); // Fail if no handler setup
@@ -168,11 +168,11 @@ module.exports = function(app, userConf) {
   /**************** Routes ******************/
   /**
    * login route (root/login)
-   * 
+   *
    * Logs a user in through IDP
    */
   app.get('/login', (req, res, next) => {
-    const redirectURL = req.query.redirect_url ? 
+    const redirectURL = req.query.redirect_url ?
                           encodeURIComponent(req.query.redirect_url) :
                           '';
     passport.authenticate('gpoauth', {
@@ -184,8 +184,8 @@ module.exports = function(app, userConf) {
   /*
    * Endpoint for exchanging a grantcode for an accessToken
    */
-  app.get('/authtoken/:redirectURL', (req, res) => {
-    const URL = req.params.redirectURL ? 
+  app.get('/authtoken/:redirectURL?', (req, res) => {
+    const URL = req.params.redirectURL ?
                 decodeURIComponent(req.params.redirectURL) :
                 '/#login';
 
@@ -257,7 +257,7 @@ module.exports = function(app, userConf) {
   });
 
   /**
-   * Simlple check endpoint that will be caught by middleware and allow for 
+   * Simlple check endpoint that will be caught by middleware and allow for
    * token refreshing.
    */
   app.get('/checktoken', (req, res, next) => res.send({status: "something"}));
@@ -303,13 +303,13 @@ function validateUserConfig(config){
 }
 
 /**
- * Takes an expired AccessToken and exchanges it for a new one (via a 
+ * Takes an expired AccessToken and exchanges it for a new one (via a
  * refreshToken). This funtion will debounce requests with the same AccessToken
  * and resolve all of them together (once the new token is aquired).
- * 
- * External Deps: 
+ *
+ * External Deps:
  *  - tokenCache: a TokenCache instance
- * 
+ *
  * Side effects:
  *  - Adds a new AccessToken / RefreshToken pair to tokenCache
  *  - Removes expired AccessToken / RefreshToken pair from tokenCache
@@ -322,17 +322,17 @@ const refreshAccessToken = (function(){
   // encloing scope: private variables for retunred function
 
   /*
-   * Object for queuing refresh request (debounce). This keeps track of all 
+   * Object for queuing refresh request (debounce). This keeps track of all
    * pending requests for a new refresh token along with all the requests
-   * to the server awaiting an authentication decision. 
-   * 
+   * to the server awaiting an authentication decision.
+   *
    * Schema:
-   *  { 
+   *  {
    *    accessToken: {
    *      request: , // id of function call to refresh token
-   *      queue: next[] // next middleware calls awaiting auth decision 
+   *      queue: next[] // next middleware calls awaiting auth decision
    *    },
-   *    ... 
+   *    ...
    *  }
    */
   let refreshQueue = {}
@@ -356,22 +356,22 @@ const refreshAccessToken = (function(){
   }
 
   /**
-   * The function assigned to refreshAccessToken. This is the callable 
+   * The function assigned to refreshAccessToken. This is the callable
    * function.
-   * 
+   *
    * @param {AccessToken} oldAccessToken - expired AccessToken to refresh
    * @param {Request} req - Express request object
    * @param {Response} res - Express response object
-   * @param {Middleware next} next - Express middleware next function 
+   * @param {Middleware next} next - Express middleware next function
    */
   return function(oldAccessToken, req, res, next){
-    if(refreshQueue[oldAccessToken]){ 
+    if(refreshQueue[oldAccessToken]){
       // Debounce the call to fetch refresh token
       clearTimeout(refreshQueue[oldAccessToken].request)
       refreshQueue[oldAccessToken].queue.push(next);
     } else {
       // Add refreshQueue record if none existing for this oldAccessToken
-      refreshQueue[oldAccessToken] = { 
+      refreshQueue[oldAccessToken] = {
         request: null,
         queue: [next]
       }
@@ -420,8 +420,8 @@ const refreshAccessToken = (function(){
 
 /**
  * Get the accessToken from request.
- * 
- * @param {Request} req 
+ *
+ * @param {Request} req
  */
 function getToken(req){
   return (req.headers.authorization || '').replace('Bearer ','');
@@ -435,7 +435,7 @@ function sendToken(res, URL, accessToken){
 
 function tokenDemo(token){
   const len = token.length
-  return len ? 
+  return len ?
         `${token.substring(0,4)}..[${len}]..${token.substring(len-4)}` :
         '[No token]'
 }
@@ -445,7 +445,7 @@ function formalError(msg, err){
 }
 
 function formalConfigError(msg, err){
-  const footer = ['Please see:\n', 
+  const footer = ['Please see:\n',
         '    https://github.com/GeoPlatform/node-gpoauth\n',
         'for examples and information on configuration settings.']
         .join('')
