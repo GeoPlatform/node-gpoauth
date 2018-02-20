@@ -177,7 +177,7 @@ module.exports = function(app, userConf) {
                           '';
     passport.authenticate('gpoauth', {
       session: true,
-      callbackURL: `/authtoken/${redirectURL}`
+      callbackURL: `${CONFIG.APP_BASE_URL}/authtoken/${redirectURL}`
     })(req, res, next)
   });
 
