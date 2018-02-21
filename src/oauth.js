@@ -185,9 +185,12 @@ module.exports = function(app, userConf) {
    * Endpoint for exchanging a grantcode for an accessToken
    */
   app.get('/authtoken/:redirectURL?', (req, res) => {
+
     const URL = req.params.redirectURL ?
                 decodeURIComponent(req.params.redirectURL) :
-                '/#login';
+                '/';
+    // debug("Params: ", req.params.redirectURL)
+    // debug("URL: ", URL)
 
     const oauth = {
       client_id: CONFIG.APP_ID,
@@ -227,7 +230,7 @@ module.exports = function(app, userConf) {
           if (error) {
             console.error(formalError("Error retrieving user information."))
             // Don't crash user applicaiton for this. Pass them thorugh without a token
-            res.redirect(URL);
+            sendToken(res, URL, accessToken)
             return // end execution
           }
           // Get user data here and emit auth event for applicaion
