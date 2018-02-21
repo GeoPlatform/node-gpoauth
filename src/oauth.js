@@ -128,9 +128,10 @@ module.exports = function(app, userConf) {
     } catch(err) {
 
       // Pass them through on endpoints setup by gpoauth
-      if(req.originalUrl.match('login') ||
-        req.originalUrl.match('authtoken') ||
-        req.originalUrl.match('revoke')
+      if(req.originalUrl.match(/ogin/)
+      || req.originalUrl.match(/revoke/)
+      || req.originalUrl.match(/authtoken/)
+      || req.originalUrl.match(/checktoken/)
       ){
         next();
 
@@ -172,13 +173,22 @@ module.exports = function(app, userConf) {
    * Logs a user in through IDP
    */
   app.get('/login', (req, res, next) => {
-    const redirectURL = req.query.redirect_url ?
+    let redirectURL = req.query.redirect_url ?
                           encodeURIComponent(req.query.redirect_url) :
                           '';
-    passport.authenticate('gpoauth', {
-      session: true,
-      callbackURL: `${CONFIG.APP_BASE_URL}/authtoken/${redirectURL}`
-    })(req, res, next)
+    redirectURL += req.query.sso ? `${redirectURL.match(/\?/) ? '&':'?'}sso=true` : ``
+      if(req.query.sso) debug(`Single Sign On (SSO) login requsted`)
+
+    const authURL = CONFIG.IDP_BASE_URL +
+                    CONFIG.IDP_AUTH_URL +
+                    `?response_type=code` +
+                    `&redirect_uri=${CONFIG.APP_BASE_URL}/authtoken/${redirectURL}` +
+                    `&scope=read` +
+                    `&client_id=${CONFIG.APP_ID}` +
+                    (req.query.sso ? '&sso=true' : '');
+
+    debug(`Login request received: redirecting to ${authURL}`)
+    res.redirect(authURL)
   });
 
   /*
@@ -189,15 +199,47 @@ module.exports = function(app, userConf) {
     const URL = req.params.redirectURL ?
                 decodeURIComponent(req.params.redirectURL) :
                 '/';
-    // debug("Params: ", req.params.redirectURL)
-    // debug("URL: ", URL)
+    debug("URL to redirect user back to: ", URL)
 
+    // Catch SSO test and redirect to page close script
+    if(req.query && req.query.sso && JSON.parse(req.query.sso) && !req.query.code){
+      // Send them an HTML file that communicates with ng-common to close SSO iframe
+      debug(`SSO login attempt failed`)
+      res.send(
+        `<!DOCTYPE html>
+        <html lang="en">
+        <head>
+          <meta charset="UTF-8">
+          <title>Close Iframe!</title>
+        </head>
+        <body>
+          <p>This is a code generated page</p>
+          <p>Please go back to <a href="${CONFIG.APP_BASE_URL}">${CONFIG.APP_BASE_URL}</a> to log in </p>
+          <script>
+            window.parent.postMessage("iframe:ssoFailed", "${CONFIG.APP_BASE_URL}");
+          </script>
+        </body>
+        </html>`
+      )
+      return
+    }
+
+    // Fails SSO attempts will not return a grant code
+    if(!req.query.code){
+      debug('No grant code recieved: redirecting user back')
+      res.redirect(URL)
+      return // end execution
+    }
+
+    debug(`Grant code received from gpoauth: `, tokenDemo(req.query.code))
     const oauth = {
       client_id: CONFIG.APP_ID,
       client_secret: CONFIG.APP_SECRET,
       grant_type: "authorization_code",
       code: req.query.code
     };
+
+    debug(`Exchanging grant code for tokens: POST - ${CONFIG.IDP_BASE_URL + CONFIG.IDP_TOKEN_URL} : ${JSON.stringify(oauth)}`)
 
     request({
       uri: CONFIG.IDP_BASE_URL + CONFIG.IDP_TOKEN_URL,
@@ -213,6 +255,7 @@ module.exports = function(app, userConf) {
 
       const accessToken = response.body.access_token;
       const refreshToken = response.body.refresh_token;
+        debug(`Tokens recieved: Access - ${tokenDemo(accessToken)} | Refresh - ${tokenDemo(refreshToken)}`)
 
       // cache the refreshToken
       tokenCache.add(accessToken, refreshToken)
@@ -270,6 +313,7 @@ module.exports = function(app, userConf) {
    */
   app.get('/revoke', (req, res, next) => {
     const accessToken = getToken(req);
+      debug(`Request Revoke Token - Token : ${tokenDemo(accessToken)}`)
 
     // Make the call to revoke the token
     request({
@@ -277,13 +321,11 @@ module.exports = function(app, userConf) {
       method: 'GET',
       headers: { 'Authorization': 'Bearer ' + accessToken }
     }, function(error, response) {
-      if (error) {
-        throw error;
-        res.status(500).send(error);
-      }
+      if (error) res.status(500).send(error)
 
       tokenCache.remove(accessToken)
       emitter.emit('accessTokenRevoked', jwt.decode(accessToken), accessToken);
+        debug(`Token successfully revoked - Token : ${tokenDemo(accessToken)}`)
       res.send({ status: 'ok' })
     });
   });
@@ -432,12 +474,12 @@ function getToken(req){
 
 function sendToken(res, URL, accessToken){
   const prefix = URL.match(/\?/) ? '&' : '?';
-  debug(`Full URL: ${URL}${prefix}access_token=${'[...]'}&token_type=Bearer`)
+  debug(`Sendinging token to browser: ${tokenDemo(accessToken)}`)
   res.redirect(`${URL}${prefix}access_token=${accessToken}&token_type=Bearer`);
 }
 
 function tokenDemo(token){
-  const len = token.length
+  const len = token && token.length
   return len ?
         `${token.substring(0,4)}..[${len}]..${token.substring(len-4)}` :
         '[No token]'
