@@ -475,7 +475,7 @@ function getToken(req){
 function sendToken(res, URL, accessToken){
   const prefix = URL.match(/\?/) ? '&' : '?';
   debug(`Sendinging token to browser: ${tokenDemo(accessToken)}`)
-  res.redirect(`${URL}${prefix}access_token=${accessToken}&token_type=Bearer`);
+  res.redirect(`${URL}${prefix}access_token=${accessToken}&cachebust=${(new Date()).getTime()}&token_type=Bearer`);
 }
 
 function tokenDemo(token){
