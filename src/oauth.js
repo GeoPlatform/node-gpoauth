@@ -111,6 +111,16 @@ module.exports = function(app, userConf) {
    *
    */
   function verifyJWT(req, res, next) {
+          // Pass them through on endpoints setup by gpoauth
+    if(req.originalUrl.match(/ogin/)
+      || req.originalUrl.match(/revoke/)
+      || req.originalUrl.match(/authtoken/)
+      || req.originalUrl.match(/checktoken/)
+    ){
+      next();
+      return // end execution
+    }
+
     const accessToken = getToken(req);
 
     try {
@@ -126,17 +136,7 @@ module.exports = function(app, userConf) {
       }
 
     } catch(err) {
-
-      // Pass them through on endpoints setup by gpoauth
-      if(req.originalUrl.match(/ogin/)
-      || req.originalUrl.match(/revoke/)
-      || req.originalUrl.match(/authtoken/)
-      || req.originalUrl.match(/checktoken/)
-      ){
-        next();
-
-        // Automatically do the refresh if token has expired
-      } else if (err instanceof jwt.TokenExpiredError) {
+      if (err instanceof jwt.TokenExpiredError) {
         logRequest('Expired token used', accessToken, req)
         refreshAccessToken(accessToken, req, res, next);
 
@@ -177,7 +177,7 @@ module.exports = function(app, userConf) {
                           encodeURIComponent(req.query.redirect_url) :
                           '';
     redirectURL += req.query.sso ? `${redirectURL.match(/\?/) ? '&':'?'}sso=true` : ``
-      if(req.query.sso) debug(`Single Sign On (SSO) login requsted`)
+      if(req.query.sso) debug(`Single Sign On (SSO) login requested`)
 
     const authURL = CONFIG.IDP_BASE_URL +
                     CONFIG.IDP_AUTH_URL +
@@ -326,7 +326,11 @@ module.exports = function(app, userConf) {
       tokenCache.remove(accessToken)
       emitter.emit('accessTokenRevoked', jwt.decode(accessToken), accessToken);
         debug(`Token successfully revoked - Token : ${tokenDemo(accessToken)}`)
-      res.send({ status: 'ok' })
+
+      // If sso set then redirect to the logout endpoint to destroy gpoauth cookie
+      req.query.sso ?
+        res.redirect(`${CONFIG.IDP_BASE_URL}/logout`) :
+        res.send({ status: 'ok' }) ;
     });
   });
 
