@@ -7,6 +7,7 @@ class MyEmitter extends require('events') {}
 const emitter = new MyEmitter();
 const errorHeader = `========[ node-gpoauth error ]=========\n`
 let CONFIG;
+let oauth_signature;
 
 /**
  * oauth module
@@ -58,7 +59,6 @@ module.exports = function(app, userConf) {
 
 
   /********* Signature Verification *********/
-  let oauth_signature = '';
   debug("-- Fetching signature from gpoauth (for verifying JWTs) -- ")
   request.post(CONFIG.IDP_BASE_URL + '/api/signature',
     // POST data
@@ -395,8 +395,12 @@ const refreshAccessToken = (function(){
    * Schema:
    *  {
    *    accessToken: {
-   *      request: , // id of function call to refresh token
-   *      queue: next[] // next middleware calls awaiting auth decision
+   *      request: ,   // id of function call to refresh token
+   *      queue: [{    // req, res, next to pass to calls awaiting middleware
+   *        req: req   // express request object
+   *        res: res   // express response object
+   *        next: next // express next function
+   *      }]
    *    },
    *    ...
    *  }
@@ -434,12 +438,20 @@ const refreshAccessToken = (function(){
     if(refreshQueue[oldAccessToken]){
       // Debounce the call to fetch refresh token
       clearTimeout(refreshQueue[oldAccessToken].request)
-      refreshQueue[oldAccessToken].queue.push(next);
+      refreshQueue[oldAccessToken].queue.push({
+        req: req,
+        res: res,
+        next: next
+      });
     } else {
       // Add refreshQueue record if none existing for this oldAccessToken
       refreshQueue[oldAccessToken] = {
         request: null,
-        queue: [next]
+        queue: [{
+          req: req,
+          res: res,
+          next: next
+        }]
       }
     }
     let refreshQueueRecord = refreshQueue[oldAccessToken]
@@ -459,12 +471,25 @@ const refreshAccessToken = (function(){
             // Send new AccessToken back to the browser though the Athorization header
             res.header('Authorization', 'Bearer ' + newAccessToken);
 
+            // Continue requests that are waiting and remove queue
+            refreshQueueRecord.queue.map(reqData => {
+              // Update expected data on each request
+              try{
+                reqData.req.jwt = jwt.verify(newAccessToken, oauth_signature);
+                reqData.req.accessToken = newAccessToken
+
+                reqData.next(err) // pass processing to all requests
+
+              } catch(e) {
+                debug("=== Error on refresh token (1): ===");
+                debug(err.message)
+                sendRefreshErrorEvent(err, reqData.req, reqData.res, reqData.next);
+              }
+            })
+
             // Remove old & add new refreshTokens to cache.
             tokenCache.remove(oldAccessToken);
             tokenCache.add(newAccessToken, newRefreshToken);
-
-            // Continue requests that are waiting and remove queue
-            refreshQueueRecord.queue.map(next => next(err)) // pass processing to all requests
             delete refreshQueue[oldAccessToken];
 
           } else {
