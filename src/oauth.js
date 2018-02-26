@@ -176,6 +176,8 @@ module.exports = function(app, userConf) {
     let redirectURL = req.query.redirect_url ?
                           encodeURIComponent(req.query.redirect_url) :
                           '';
+      if(redirectURL.length) debug("Redirect URL set to: ", redirectURL)
+
     redirectURL += req.query.sso ? `${redirectURL.match(/\?/) ? '&':'?'}sso=true` : ``
       if(req.query.sso) debug(`Single Sign On (SSO) login requested`)
 
@@ -300,6 +302,19 @@ module.exports = function(app, userConf) {
 
 
     });
+  });
+
+  /**
+   * Endpoint that presents a loading screen while
+   */
+  app.get('/auth/loading', (req, res) => {
+    debug("Auth loading page requested")
+    // sendFile not added till express 4.8.
+    const fs = require('fs');
+    const path = require('path')
+
+    const html = fs.readFileSync(path.resolve(__dirname + `/html/loading.html`), 'utf8')
+    res.send(html)
   });
 
   /**
