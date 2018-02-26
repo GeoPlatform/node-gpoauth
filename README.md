@@ -16,7 +16,7 @@ The node-gpoauth moduel will setup up a few api routes for your application. The
 
 | Endpoint | Description | Optional Query parameters |
 |---|---|---|
-| /login | Endpoint that will re-direct user to IDP for authentication. | **redirect_url**: optional url to redirct user to after authenticating <br> **sso**: SSO login boolean. Set to true if attempting SSO login, in this case gpoauth will automatically submit login form and login chain may fail (This is intended as a headless/no UI login attempt). |
+| /login | Endpoint that will re-direct user to IDP for authentication. | **redirect_url**: optional url to redirct user to after authenticating <br><br> **sso**: SSO login boolean. Set to true if attempting SSO login, in this case gpoauth will automatically submit login form and login chain may fail (This is intended as a headless/no UI login attempt). |
 | /authtoken | Endopint that will handle Grant Code exchange from IDP. | |
 | /revoke | Endpoint for revoking JWT. This should be called on logout| **sso**: Optional boolean field. If true the request will be redirected to the gpoauth /revoke endpoint. This will reirect the request to the browser to the gpoauth login page and clear the gpoauth session cookie (required for true logout). |
 | /checktoken | Endpoint that allows front end application to refresh accessToken in the event that is has expired. | |
