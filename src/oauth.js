@@ -112,10 +112,11 @@ module.exports = function(app, userConf) {
    */
   function verifyJWT(req, res, next) {
           // Pass them through on endpoints setup by gpoauth
-    if(req.originalUrl.match(/ogin/)
+    if(req.originalUrl.match(/login/)
       || req.originalUrl.match(/revoke/)
       || req.originalUrl.match(/authtoken/)
       || req.originalUrl.match(/checktoken/)
+      || req.originalUrl.match(/auth\/loading/)
     ){
       next();
       return // end execution
@@ -173,6 +174,7 @@ module.exports = function(app, userConf) {
    * Logs a user in through IDP
    */
   app.get('/login', (req, res, next) => {
+    // TODO: Should refactor to remove the odd double URI encoding of redirect_url
     let redirectURL = req.query.redirect_url ?
                           encodeURIComponent(req.query.redirect_url) :
                           '';

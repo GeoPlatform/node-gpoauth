@@ -14,10 +14,14 @@ Node-gpoauth does the following things:
 
 The node-gpoauth moduel will setup up a few api routes for your application. These routes are:
 
-| Endpoint | Description |
-|---|---|
-|/login | Endpoint that will re-direct user to IDP for authentication. |
-|/authtoken | Endopint that will handle Grant Code exchange from IDP. |
+| Endpoint | Description | Optional Query parameters |
+|---|---|---|
+| /login | Endpoint that will re-direct user to IDP for authentication. | **redirect_url**: optional url to redirct user to after authenticating <br> **sso**: SSO login boolean. Set to true if attempting SSO login, in this case gpoauth will automatically submit login form and login chain may fail (This is intended as a headless/no UI login attempt). |
+| /authtoken | Endopint that will handle Grant Code exchange from IDP. | |
+| /revoke | Endpoint for revoking JWT. This should be called on logout| **sso**: Optional boolean field. If true the request will be redirected to the gpoauth /revoke endpoint. This will reirect the request to the browser to the gpoauth login page and clear the gpoauth session cookie (required for true logout). |
+| /checktoken | Endpoint that allows front end application to refresh accessToken in the event that is has expired. | |
+| /auth/loading | Endpoint for showing simplified page that sets localstorage. This is desifned to work alongside ng-common to set expected variables (namly, window.localStorage.gpoauthJWT). | |
+
 
 <br>
 
@@ -48,13 +52,13 @@ const config = {
 const IDP = nodeGpoauth(app, config);
 
 // Setup event handlers
-IDP.on('unauthorizedRequest', (req, res, next) => { 
-  //... 
+IDP.on('unauthorizedRequest', (req, res, next) => {
+  //...
 })
 ```
 
 ## Setup
-Setting up the module requires two fields:  
+Setting up the module requires two fields:
 
 | Param | Type | Description |
 |---|---|---|
@@ -97,15 +101,15 @@ The JWT and accessToken (encoded JWT) are made avaliable in all authorized node-
 ## JWT
 Gpoauth passes user data around using JWTs (for more info on JWTs see: https://jwt.io/introduction/). The JWT carries basic user information from gpoauth. A gpoauth JWT will holds the following format:
 ```javascript
-{ 
+{
   sub: '5a7b3cb5113cb7001d0cd635',            // userId
   name: 'Built-In Admin',                     // full name of user
   email: 'admin@example.com',
   username: 'admin',
-  roles: 'admin',                          
+  roles: 'admin',
   groups: [                                   // Groups (Roles) a user has/is in
      { _id: '5a7b3cb5113cb7001d0cd63a', name: 'Administrators' },
-     { _id: '5a7b3cb5113cb7001d0cd639', name: 'Users' } 
+     { _id: '5a7b3cb5113cb7001d0cd639', name: 'Users' }
   ],
   orgs: [                                     // Users organiztion
     { id: '5a7b3cb5113cb7001d0cd238', name: 'Image Matters, LLC' }
@@ -115,7 +119,7 @@ Gpoauth passes user data around using JWTs (for more info on JWTs see: https://j
   aud: '5a7b3d9e113cb7001d0cd644',
   nonce: 'not implement',
   iat: 1518120742,
-  exp: 1518122542 
+  exp: 1518122542
 }
 
 ```
@@ -137,15 +141,15 @@ Avaliable events are:
 
 
 >## userAuthenticated (optional)
->Event that is fired when a user is authenticated to IDP through your application. The event will only fire when a user completes the redirect back to your application after logging into the IDP (it will not happen per request for already authenticted users). This event is useful for creating a user in your system (or linking an existing user in your system) with an IDP user.  
+>Event that is fired when a user is authenticated to IDP through your application. The event will only fire when a user completes the redirect back to your application after logging into the IDP (it will not happen per request for already authenticted users). This event is useful for creating a user in your system (or linking an existing user in your system) with an IDP user.
 >
 >**Parameters:**
 >
 >| Name | Type | Description |
 >|---|---|---|
 >|user | User | The user passed back from the IDP service (See example above for Object properties) |
-> 
-> **Example:** 
+>
+> **Example:**
 > ```javascript
 >IDP.on('userAuthenticated', user => {
 >  // Register/link IDP user with application user
@@ -177,7 +181,7 @@ Avaliable events are:
 > ## unauthorizedRequest (required)
 > This event is called with an unauthorized request is made to your application. It will only be called in the event that the client (browser) making the request does not have a valid JWT. Depending on how your application is set up you may want to filter only some requests. For example, if your application servers both static assets as well as an API you will only want to limit access to the API. You application is required to implement a handler for this event. If there is no registered event handler for this event node-gpoauth will throw and error.
 >
->**NOTE:**   
+>**NOTE:**
 >Failing to either call the next funcation or send a response to the client will cause the application to hang as Express will not continue processing the request middleware.
 >
 >**Parameters:**
@@ -211,7 +215,7 @@ Avaliable events are:
 > ## accessGranted (optional)
 > This event is called when a user has a valid JWT and are about to be passed on for regular request processing. This event can be used as a kind of catch all middleware for more granular access control based on the user requesting the resource. The JWT can be accessed via req.jwt and user information can then be used to futher restrict access to resources. (See example below).
 >
->**NOTE:**   
+>**NOTE:**
 >By default, if this event is not implemented the request will be treated as a regular request.
 >
 >**Parameters:**
@@ -233,12 +237,12 @@ Avaliable events are:
 >
 >  // Only allow admins to access resources at the admin endpoints
 >  if(GROUPS.indexOf('admin') === -1) {
->    res.status(401).send({ 
->      err: "Only admin users are able to access this endpoint." 
+>    res.status(401).send({
+>      err: "Only admin users are able to access this endpoint."
 >    })
 >  } else {
 >    next();
->  } 
+>  }
 >})
 >```
 
@@ -246,7 +250,7 @@ Avaliable events are:
 > ## errorRefreshingAccessToken (optional)
 > This event is called when node-gpoauth was not able to successfully refresh an accessToken. This usually happnens when either node-gpoauth does not have a refreshToken associated to the accessToken or when the gpoauth server refused to grant another access token.
 >
->**NOTE:**   
+>**NOTE:**
 >By default, if this event is not implemented the request will be treated as a regular unauthenticaedRequest and will be handeled by that event.
 >
 >**Parameters:**
@@ -265,10 +269,10 @@ Avaliable events are:
 >  if(/*allowRequest*/) {
 >    next();
 >  } else {
->    res.status(401).send({ 
->      err: "Refresh token expired, unable to complete request." 
+>    res.status(401).send({
+>      err: "Refresh token expired, unable to complete request."
 >    })
->  } 
+>  }
 >})
 >```
 
@@ -283,8 +287,8 @@ Avaliable events are:
 >|---|---|---|
 >|jwt | JWT | The revoked JWT |
 >|revokedToken | AccessToken | The raw token that was revoked |
-> 
-> **Example:** 
+>
+> **Example:**
 > ```javascript
 >IDP.on('accessTokenRevoked', (jwt, revokedToken) => {
 >  // handle event here
