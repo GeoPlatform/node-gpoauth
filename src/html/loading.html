@@ -83,6 +83,7 @@
   </div>
 
   <script>
+
     // Set the localstorage
     getJWTFromUrl = function(){
       const queryString = window.location.href
@@ -90,11 +91,14 @@
       return res && res[1];
     };
 
-    // Set to localstorage
-    window.localStorage.gpoauthJWT = getJWTFromUrl();
 
-    // Post the completed message
-    window.parent.postMessage("iframe:userAuthenticated", '*');
+    window.onload = function() {
+      // Set to localstorage
+      window.localStorage.gpoauthJWT = getJWTFromUrl();
+
+      // Post the completed message
+      window.parent.postMessage("iframe:userAuthenticated", window.location.origin);
+    };
   </script>
 
 </body>
