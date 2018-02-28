@@ -1,11 +1,12 @@
 const request = require('request');
 const jwt = require('jsonwebtoken');
+const color = require('./consoleColors.js')
 let tokenCache = require('./tokenCache.js');
 
 /************ Event Emitter ***************/
 class MyEmitter extends require('events') {}
 const emitter = new MyEmitter();
-const errorHeader = `========[ node-gpoauth error ]=========\n`
+const errorHeader = `${color.FgRed}========[ node-gpoauth error ]=========${color.Reset}\n`
 let CONFIG;
 let oauth_signature;
 
@@ -59,46 +60,65 @@ module.exports = function(app, userConf) {
 
 
   /********* Signature Verification *********/
-  debug("-- Fetching signature from gpoauth (for verifying JWTs) -- ")
-  request.post(CONFIG.IDP_BASE_URL + '/api/signature',
-    // POST data
-    {
-      form: {
-        client_id: CONFIG.APP_ID,
-        client_secret: CONFIG.APP_SECRET
-      }
-    },
-    // Handler
-    function(error, response, rawBody) {
-      if(error) {
-        debug("Error retrieving signature from gpoauth")
-        throw formalConfigError(['Not able to connect to gpoauth and fetch signature for JWT validation\n',
-                  'Please check your settings passed to node-gpoauth and that the gpoauth server is running.\n',
-                  ].join(''),
-                  error);
-      }
+  /**
+   * Attempt to fetch signature from auth using the APP_ID and APP_SECRET
+   *
+   * @method fetchJWTSignature
+   * @param {string} app_id - APP_ID of the application
+   * @param {string} app_secret - APP_SECRET of the applicaiton
+   *
+   * @returns {Promise<string>} the signature or cause of error
+   */
+  function fetchJWTSignature(app_id, app_secret){
+    debug("-- Fetching signature from gpoauth (for verifying JWTs) -- ")
+    return new Promise((resolve, reject) => {
 
-      try{
-        var body = JSON.parse(rawBody)
-      } catch(err){
-        debug("Error parsing signature response")
-        debug(rawBody)
-        throw formalConfigError('Was not to parse signature from gpoauth.\n', 'This likely means the APP_ID and APP_SECRET are incorrect.')
-      }
+      // Request signature
+      request.post(CONFIG.IDP_BASE_URL + '/api/signature',
+        // POST data
+        {
+          form: {
+            client_id: app_id,
+            client_secret: app_secret
+          }
+        },
+        // Handler
+        function(error, response, rawBody) {
+          if(error) {
+            debug(`${color.FgRed}Error retrieving signature from gpoauth${color.Reset}`)
+            reject(formalConfigError(['Not able to connect to gpoauth and fetch signature for JWT validation\n',
+                      'Please check your settings passed to node-gpoauth and that the gpoauth server is running.\n',
+                      ].join(''),
+                      error));
+          }
 
-      if (!body.secret) {
-        debug("Error retrieving signature from gpoauth")
-        throw formalConfigError(['No signature returned from gpoauth.\n' +
-                        'This likely means the APP_ID and APP_SECRET are either ',
-                        'invalid or not registed with the gpoauth server.',
-                        ].join(''),
-                        error);
-      } else {
-        debug("-- Signature obtained and stored --")
-        oauth_signature = Buffer.from(body.secret, 'base64').toString()
-      }
-  });
+          try{
+            var body = JSON.parse(rawBody)
+          } catch(err){
+            debug(`${color.FgRed}Error parsing signature response${color.Reset}: ${rawBody}`)
+            reject(formalConfigError('Was not to parse signature from gpoauth.\n', 'This likely means the APP_ID and APP_SECRET are incorrect.'))
+          }
 
+          if (!body || !body.secret) {
+            debug(`${color.FgRed}Error retrieving signature from gpoauth${color.Reset}`)
+            reject(formalConfigError(['No signature returned from gpoauth.\n' +
+                            'This likely means the APP_ID and APP_SECRET are either ',
+                            'invalid or not registed with the gpoauth server.',
+                            ].join(''),
+                            error));
+          } else {
+            debug(`${color.FgYellow}-- Signature obtained and stored --${color.Reset}`)
+            resolve(Buffer.from(body.secret, 'base64').toString())
+          }
+      });
+    })
+
+  }
+
+  // Attempt to obtaion signature immediatly
+  fetchJWTSignature(CONFIG.APP_ID, CONFIG.APP_SECRET)
+    .then(sig => oauth_signature = sig)
+    .catch(err => console.error(err))
 
 
 
@@ -111,7 +131,7 @@ module.exports = function(app, userConf) {
    *
    */
   function verifyJWT(req, res, next) {
-          // Pass them through on endpoints setup by gpoauth
+    // Pass them through on endpoints setup by gpoauth
     if(req.originalUrl.match(/login/)
       || req.originalUrl.match(/revoke/)
       || req.originalUrl.match(/authtoken/)
@@ -124,26 +144,55 @@ module.exports = function(app, userConf) {
 
     const accessToken = getToken(req);
 
-    try {
-      const decoded = jwt.verify(accessToken, oauth_signature);
-      req.jwt = decoded
-      req.accessToken = accessToken
-        logRequest('Access Granted', accessToken, req)
+    if(!oauth_signature){
+      // Git the signature then try again
+      fetchJWTSignature(CONFIG.APP_ID, CONFIG.APP_SECRET)
+        .then(sig => {
+          oauth_signature = sig;
+          verifyJWT(req, res, next)/* try again*/
+        })
+        .catch(err => {
+          logRequest('Unauthorized Request', accessToken, req)
+          fireUnauthorizedRequest(err, req, res, next)
+        })
 
-      if(emitter.listenerCount('accessGranted') > 0){
-        emitter.emit('accessGranted', req, res, next);
-      } else {
-        next();
+    // Do the actual validtion here
+    } else {
+
+       try {
+        const decoded = jwt.verify(accessToken, oauth_signature);
+        req.jwt = decoded
+        req.accessToken = accessToken
+          logRequest('Access Granted', accessToken, req)
+
+        if(emitter.listenerCount('accessGranted') > 0){
+          emitter.emit('accessGranted', req, res, next);
+        } else {
+          next();
+        }
+
+      } catch(err) {
+        if (err instanceof jwt.TokenExpiredError) {
+          logRequest('Expired token used', accessToken, req)
+          refreshAccessToken(accessToken, req, res, next);
+
+        } else {
+          // Call the listener 'unauthorizedRequest' handler if registered
+          logRequest('Unauthorized Request', accessToken, req)
+          fireUnauthorizedRequest(err, req, res, next)
+        }
       }
+    }
+  }
 
-    } catch(err) {
-      if (err instanceof jwt.TokenExpiredError) {
-        logRequest('Expired token used', accessToken, req)
-        refreshAccessToken(accessToken, req, res, next);
 
-      // Call the listener 'unauthorizedRequest' handler if registered
-      } else if(emitter.listenerCount('unauthorizedRequest') > 0){
-        logRequest('Unauthorized Request', accessToken, req)
+
+  // ======== Setup middleware ======== //
+  app.use(verifyJWT);
+
+
+  function fireUnauthorizedRequest(err, req, res, next){
+      if(emitter.listenerCount('unauthorizedRequest') > 0){
         emitter.emit('unauthorizedRequest', err, req, res, next);
 
       // Require 'unauthorizedRequest' event handler inside hosting application
@@ -158,13 +207,7 @@ module.exports = function(app, userConf) {
         ].join('')
         next(new Error(errorHeader + msg)); // Fail if no handler setup
       }
-    }
   }
-
-
-  // ======== Setup middleware ======== //
-  app.use(verifyJWT);
-
 
 
   /**************** Routes ******************/
@@ -191,7 +234,7 @@ module.exports = function(app, userConf) {
                     `&client_id=${CONFIG.APP_ID}` +
                     (req.query.sso ? '&sso=true' : '');
 
-    debug(`Login request received: redirecting to ${authURL}`)
+    debug(`Login request received: redirecting to ${color.FgBlue}${authURL}${color.Reset}`)
     res.redirect(authURL)
   });
 
@@ -203,12 +246,12 @@ module.exports = function(app, userConf) {
     const URL = req.params.redirectURL ?
                 decodeURIComponent(req.params.redirectURL) :
                 '/';
-    debug("URL to redirect user back to: ", URL)
+    debug(`URL to redirect user back to: ${color.FgBlue}${URL}${color.Reset}`)
 
     // Catch SSO test and redirect to page close script
     if(req.query && req.query.sso && JSON.parse(req.query.sso) && !req.query.code){
       // Send them an HTML file that communicates with ng-common to close SSO iframe
-      debug(`SSO login attempt failed`)
+      debug(`${color.FgRed}SSO login attempt failed${color.Reset}`)
       res.send(
         `<!DOCTYPE html>
         <html lang="en">
@@ -230,7 +273,7 @@ module.exports = function(app, userConf) {
 
     // Fails SSO attempts will not return a grant code
     if(!req.query.code){
-      debug('No grant code recieved: redirecting user back')
+      debug(`${color.FgRed}No grant code recieved: redirecting user back${color.Reset}`)
       res.redirect(URL)
       return // end execution
     }
@@ -493,7 +536,7 @@ const refreshAccessToken = (function(){
             delete refreshQueue[oldAccessToken];
 
           } else {
-            debug("=== Error on refresh token: ===");
+            debug(`${color.FgRed}=== Error on refresh token: ===${color.Reset}`);
             debug(err.message)
             sendRefreshErrorEvent(err, req, res, next);
           }
@@ -502,7 +545,7 @@ const refreshAccessToken = (function(){
       }, CONFIG.REFRESH_DEBOUNCE);
 
     } else {
-      debug(`Error on refresh token: No valid refresh token found for accessToken ${tokenDemo(oldAccessToken)}`);
+      debug(`${color.FgRed}Error on refresh token: No valid refresh token found for accessToken${color.Reset} ${tokenDemo(oldAccessToken)}`);
       sendRefreshErrorEvent(null, req, res, next)
     }
 
@@ -536,18 +579,16 @@ function formalError(msg, err){
 }
 
 function formalConfigError(msg, err){
-  const footer = ['Please see:\n',
-        '    https://github.com/GeoPlatform/node-gpoauth\n',
-        'for examples and information on configuration settings.']
-        .join('')
+  const footer = `Please see: ${color.FgYellow}https://github.com/GeoPlatform/node-gpoauth${color.Reset}
+for examples and information on configuration settings.`
   return new Error(`${errorHeader}\n${msg}\n${footer}\n\n${err}`)
 }
 
 function logRequest(status, token, req){
-  debug(`${status} - Token: ${tokenDemo(token)} | ${req.method} - ${req.originalUrl}`)
+  debug(`${color.FgYellow}${status}${color.Reset} - Token: ${tokenDemo(token)} | ${req.method} - ${req.originalUrl}`)
 }
 
 function debug(){
   if(CONFIG.AUTH_DEBUG)
-    console.log.apply(this, [`[node-gpoauth ${(new Date()).toLocaleTimeString()}] `].concat(Array.prototype.slice.call(arguments)))
+    console.log.apply(this, [`${color.FgGreen}[node-gpoauth ${(new Date()).toLocaleTimeString()}] ${color.Reset}`].concat(Array.prototype.slice.call(arguments)))
 }
