@@ -218,13 +218,17 @@ module.exports = function(app, userConf) {
    */
   app.get('/login', (req, res, next) => {
     // TODO: Should refactor to remove the odd double URI encoding of redirect_url
-    let redirectURL = req.query.redirect_url ?
-                          encodeURIComponent(req.query.redirect_url) :
-                          '';
-      if(redirectURL.length) debug("Redirect URL set to: ", redirectURL)
+    if(req.query.redirect_url) debug(`Redirect URL set to: ${color.FgBlue}${req.query.redirect_url}${color.Reset}`)
 
-    redirectURL += req.query.sso ? `${redirectURL.match(/\?/) ? '&':'?'}sso=true` : ``
-      if(req.query.sso) debug(`Single Sign On (SSO) login requested`)
+    let redirectURL;
+    if(req.query.sso){
+      redirectURL = `?sso=true`
+      debug(`Single Sign On (SSO) login requested`)
+    } else {
+      redirectURL = req.query.redirect_url ?
+                      encodeURIComponent(req.query.redirect_url) :
+                      '';
+    }
 
     const authURL = CONFIG.IDP_BASE_URL +
                     CONFIG.IDP_AUTH_URL +
@@ -242,11 +246,6 @@ module.exports = function(app, userConf) {
    * Endpoint for exchanging a grantcode for an accessToken
    */
   app.get('/authtoken/:redirectURL?', (req, res) => {
-
-    const URL = req.params.redirectURL ?
-                decodeURIComponent(req.params.redirectURL) :
-                '/';
-    debug(`URL to redirect user back to: ${color.FgBlue}${URL}${color.Reset}`)
 
     // Catch SSO test and redirect to page close script
     if(req.query && req.query.sso && JSON.parse(req.query.sso) && !req.query.code){
@@ -270,6 +269,20 @@ module.exports = function(app, userConf) {
       )
       return
     }
+
+    /******** Exchange and redirect *******/
+
+    let URL;
+    if(req.query.sso){
+      // Always use the auth/loading endpoint to prevent loading the applicaiton
+      // again in the SSO iframe.
+      URL = '/auth/loading'
+    } else {
+      URL = req.params.redirectURL ?
+              decodeURIComponent(req.params.redirectURL) :
+              '/';
+    }
+    debug(`URL to redirect user back to: ${color.FgBlue}${URL}${color.Reset}`)
 
     // Fails SSO attempts will not return a grant code
     if(!req.query.code){
@@ -350,7 +363,9 @@ module.exports = function(app, userConf) {
   });
 
   /**
-   * Endpoint that presents a loading screen while
+   * Endpoint that presents a loading entire applicaiton again when all
+   * that we really want is to set the localstorage and call events for
+   * ng-common to handle.
    */
   app.get('/auth/loading', (req, res) => {
     debug("Auth loading page requested")
@@ -563,7 +578,7 @@ function getToken(req){
 
 function sendToken(res, URL, accessToken){
   const prefix = URL.match(/\?/) ? '&' : '?';
-  debug(`Sendinging token to browser: ${tokenDemo(accessToken)}`)
+  debug(`Sendinging token to browser: Token: ${tokenDemo(accessToken)} | URL: ${URL}`)
   res.redirect(`${URL}${prefix}access_token=${accessToken}&cachebust=${(new Date()).getTime()}&token_type=Bearer`);
 }
 
