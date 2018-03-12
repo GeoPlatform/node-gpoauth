@@ -94,7 +94,7 @@
 
     window.onload = function() {
       // Set to localstorage
-      window.localStorage.gpoauthJWT = getJWTFromUrl();
+      window.localStorage.gpoauthJWT = btoa(getJWTFromUrl()); // encode it
 
       // Post the completed message
       window.parent.postMessage("iframe:userAuthenticated", window.location.origin);
