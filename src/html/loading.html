@@ -86,8 +86,8 @@
 
     // Set the localstorage
     getJWTFromUrl = function(){
-      const queryString = window.location.href
-      const res = queryString.match(/access_token=([^\&]*)/);
+      var queryString = window.location.href;
+      var res = queryString.match(/access_token=([^\&]*)/);
       return res && res[1];
     };
 
