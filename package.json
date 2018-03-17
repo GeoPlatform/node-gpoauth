@@ -1,6 +1,6 @@
 {
   "name": "node-gpoauth",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "description": "GPOAuth Node Module",
   "homepage": "idp.geoplatform.gov",
   "author": {
