@@ -32,6 +32,20 @@ Import node-gpoauth directly from github using the following in package.json:
 
 <br>
 
+### Development and local integration
+To develop with `node-gpoauth` locally you will need to install it from you local file system. First start by checking out the codebase and then use NPM in insalll it locally:
+> $ # Clone node-gpoauth  
+> $ git clone git@github.com:GeoPlatform/node-gpoauth.git  
+>  
+> $ # cd to your appliction (local development)  
+> $ cd myApp  
+>   
+> $ # install using npm (path relative to your application directory)  
+> $ npm install file:../node-gpoauth  
+
+<br>
+<br>
+
 ## Usage
 Load and instanciate the module:
 ```javascript
@@ -293,6 +307,6 @@ Avaliable events are:
 >IDP.on('accessTokenRevoked', (jwt, revokedToken) => {
 >  // handle event here
 >})
->```
+>``` 
 
 
