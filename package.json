@@ -8,7 +8,7 @@
     "email": "forestg@imagemattersllc.com",
     "url": "www.imagemattersllc.com"
   },
-  "main": "src/oauth.js",
+  "main": "src/index.js",
   "keywords": [
     "idp",
     "oauth",
@@ -29,10 +29,6 @@
   },
   "dependencies": {
     "jsonwebtoken": "^8.1.0",
-    "passport": "^0.3.2",
-    "passport-http-bearer": "^1.0.1",
-    "passport-oauth2": "^1.4.0",
-    "passport-oauth2-refresh": "^1.0.0",
     "request": "^2.83.0"
   },
   "devDependencies": {
@@ -42,8 +38,8 @@
   },
   "config": {
     "IDP_BASE_URL": "http://localhost:8889",
-    "APP_ID": "5a5fb0b338ce56de160458cf",
-    "APP_SECRET": "UbiG1An7Cpy2nnbcgWXjNptboQcvxkp0YCiEZkCeMe",
+    "APP_ID": "5a9a151bca408e001d820c3b",
+    "APP_SECRET": "OAq8UuOuB1DENjwPxvdj231weziIbyzmm1brpzqERz",
     "SERVICE_NAME": "node-gpoauth",
     "APP_BASE_URL": "http://localhost:3456"
   }
