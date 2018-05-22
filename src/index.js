@@ -28,7 +28,8 @@ module.exports = function(app, userConf) {
     AUTH_TYPE: "grant",
     CALLBACK: "http://localhost:3456/authtoken",
     SCOPES: 'read',
-    REFRESH_DEBOUNCE: 250 // debounce delay
+    REFRESH_DEBOUNCE: 250,
+    PRE_REFRESH_BUFFER: 250
   }
 
   // Validate passed in config

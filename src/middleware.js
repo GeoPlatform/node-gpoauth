@@ -50,6 +50,20 @@ module.exports = function(CONFIG, emitter){
     }
   }
 
+  /**
+   * Does the accessToken need to be refrehed.
+   *
+   * @method needsRefreshed
+   * @param {Number} now - Unix time stamp (in seconds)
+   * @param {Number} exp - Unix time stamp (in seconds)
+   * @param {Number} buffer - number of seconds for pre-refresh
+   *
+   * @return boolean
+   */
+  function needsRefreshed(now, exp, buffer){
+    return now >= (exp - buffer);
+  }
+
 
   /**************** Middleware ****************/
 
@@ -90,6 +104,12 @@ module.exports = function(CONFIG, emitter){
     } else {
       try {
         const decoded = jwt.verify(accessToken, tokenCache.getSignature());
+
+        // Force refresh if withing REFRESH_DEBOUNCE buffer
+        const now = (new Date()).getTime();
+        if(needsRefreshed(now, decoded.exp * 1000, CONFIG.PRE_REFRESH_BUFFER))
+          throw new jwt.TokenExpiredError('Token is past PRE_REFRESH_BUFFER limit', now - CONFIG.PRE_REFRESH_BUFFER);
+
         req.jwt = decoded
         req.accessToken = accessToken
           LOGGER.logRequest('Access Granted', accessToken, req)
@@ -102,7 +122,7 @@ module.exports = function(CONFIG, emitter){
 
       } catch(err) {
         if (err instanceof jwt.TokenExpiredError) {
-          LOGGER.logRequest('Expired token used', accessToken, req)
+          LOGGER.logRequest(`Expired token used: ${err}`, accessToken, req)
           refreshAccessToken(accessToken, req, res, next);
 
         } else {
