@@ -26,6 +26,22 @@ function sendToken(res, URL, accessToken){
 }
 
 /**
+ * Pretty format a Token Response.
+ *
+ * @param {Object} tokenResponse
+ */
+function getPrettyRespone(resp){
+  const LOGGER = require('./logger.js')(false);
+  return {
+    access_token: LOGGER.tokenDemo(resp.access_token),
+    refresh_token: LOGGER.tokenDemo(resp.refresh_token),
+    id_token: LOGGER.tokenDemo(resp.id_token),
+    expires_in: resp.expires_in,
+    token_type: resp.token_type
+  }
+}
+
+/**
  * Routes
  *
  * Setup for the routes added by node-gpoauth
@@ -134,7 +150,7 @@ module.exports = function(CONFIG, app, emitter){
       .then(tokenResp => {
         const accessToken = tokenResp.access_token;
         const refreshToken = tokenResp.refresh_token;
-          LOGGER.debug(`Response from exchange: `, tokenResp)
+          LOGGER.debug(`Response from exchange: `, getPrettyRespone(tokenResp))
           LOGGER.debug(`Tokens recieved: Access - ${LOGGER.tokenDemo(accessToken)} | Refresh - ${LOGGER.tokenDemo(refreshToken)}`)
 
         // cache the refreshToken

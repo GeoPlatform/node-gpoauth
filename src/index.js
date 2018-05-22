@@ -40,8 +40,10 @@ module.exports = function(app, userConf) {
   const LOGGER = require('./logger.js')(CONFIG.AUTH_DEBUG);
   const AUTH = require('./oauth.js')(CONFIG, emitter)
   const routes = require('./routes')(CONFIG, app, emitter)
+  const middleware = require('./middleware.js')(CONFIG, emitter)
 
-  require('./middleware.js')(CONFIG, app, emitter) // setup middleware
+  // Setup Middleware ==========================================
+  app.use(middleware.verifyJWT)
 
   // Attempt to obtaion signature immediatly
   AUTH.fetchJWTSignature()
@@ -50,10 +52,6 @@ module.exports = function(app, userConf) {
 
     LOGGER.debug(' ======== Debugger enabled ======== ')
     LOGGER.debug('Config: ', CONFIG)
-
-    console.log("")
-    console.log(" --> Up <-- ")
-    console.log("")
 
   /*** Expose emitter so application can subscribe to events ***/
   return emitter;
