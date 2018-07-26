@@ -1,9 +1,9 @@
 // Types in node-gpoauth
 
 // Roles in IDP (gpoauth)
-type IDPRole = admin
-             | staff
-             | user
+type IDPRole = 'admin'
+             | 'staff'
+             | 'user'
 
 // Configuration for node-gpoauth
 type gpoauthConfig = {
@@ -52,5 +52,5 @@ type userProfile = {
     appSettings: [object]
     auditLog: [undefined]
     lockoutCount: number
-    lockedOut: booelan
+    lockedOut: Boolean
 }
