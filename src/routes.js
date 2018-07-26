@@ -216,8 +216,8 @@ module.exports = function(CONFIG, app, emitter){
    * token refreshing.
    */
   app.get('/checktoken', (req, res, next) => {
-    const token = res.headers.Authorization ?
-                  res.headers.Authorization.replace("Bearer ","") :
+    const token = req.headers.Authorization ?
+                  req.headers.Authorization.replace("Bearer ","") :
                   req.accessToken;
     res.send({ access_token: token })
   });
