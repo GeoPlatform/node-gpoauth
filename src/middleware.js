@@ -79,8 +79,8 @@ module.exports = function(CONFIG, emitter){
     if(req.originalUrl.match(/login/)
       || req.originalUrl.match(/revoke/)
       || req.originalUrl.match(/authtoken/)
-      || req.originalUrl.match(/checktoken/)
       || req.originalUrl.match(/auth\/loading/)
+      // Omit "/checktoken" endpoint so that it will initiate a refresh
     ){
       next();
       return // end execution
@@ -221,6 +221,7 @@ module.exports = function(CONFIG, emitter){
               LOGGER.debug("=========================")
 
               res.header('Authorization', 'Bearer ' + newAccessToken);
+              LOGGER.debug(`Authorization token sent to browser: '${color.FgBlue}Bearer ${LOGGER.tokenDemo(newAccessToken)}${color.Reset}'`)
 
               // Remove old & add new refreshTokens to cache.
               tokenCache.remove(oldAccessToken);
@@ -230,10 +231,8 @@ module.exports = function(CONFIG, emitter){
 
               // Pass back to verifyJWT for processing
               refreshQueueRecord.queue.map(r => {
-                // Update request with new token
-                // Send new AccessToken back to the browser though the Athorization header
+                // Update request with new token to pass validation (post refresh)
                 r.req.headers.authorization = `Bearer ${newAccessToken}`;
-                // r.res.header('Authorization', `Bearer ${newAccessToken}`);
                 // Pass back to verify
                 verifyJWT(r.req, r.res, r.next)
               })
@@ -246,14 +245,13 @@ module.exports = function(CONFIG, emitter){
         }, CONFIG.REFRESH_DEBOUNCE);
 
       } else {
-        LOGGER.debug(`${color.FgRed}Error on refresh token: No valid refresh token found for accessToken${color.Reset} ${LOGGER.tokenDemo(oldAccessToken)}`);
-        AUTH.sendRefreshErrorEvent(null, req, res, next)
+        const msg = `${color.FgRed}Error on refresh token: No valid refresh token found for accessToken${color.Reset} ${LOGGER.tokenDemo(oldAccessToken)}`
+        LOGGER.debug(msg);
+        AUTH.sendRefreshErrorEvent(new Error(msg), req, res, next)
       }
     }
   })();
 
   // Exposing ======================================
-  return {
-    verifyJWT: verifyJWT
-  }
+  return { verifyJWT }
 }

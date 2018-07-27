@@ -46,13 +46,28 @@ module.exports = function(app, userConf) {
   // Setup Middleware ==========================================
   app.use(middleware.verifyJWT)
 
+  /**
+   * Simlple check endpoint that will be caught by middleware and allow for
+   * token refreshing.
+   *
+   * NOTE:
+   *   Must be AFTER middleware is applied
+   *   (This endpoint is not included in the routes page because we want this
+   *   endpoint subbject to the middleware call that will force a refresh)
+   */
+  app.get('/checktoken', (req, res, next) => {
+    res.send({ access_token: req.accessToken || null })
+  });
+
   // Attempt to obtaion signature immediatly
   AUTH.fetchJWTSignature()
     .then(sig => tokenCache.setSignature(sig))
     .catch(err => console.error(err))
 
-    LOGGER.debug(' ======== Debugger enabled ======== ')
-    LOGGER.debug('Config: ', CONFIG)
+    LOGGER.debug(` ======== node-gpoauth - ${process.env.npm_package_version} ======== `)
+    LOGGER.debug('  Debugger Enabled ')
+    LOGGER.debug('Config: ')
+    LOGGER.debug(CONFIG)
 
   /*** Expose emitter so application can subscribe to events ***/
   return emitter;

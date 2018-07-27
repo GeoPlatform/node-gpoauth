@@ -212,17 +212,6 @@ module.exports = function(CONFIG, app, emitter){
   });
 
   /**
-   * Simlple check endpoint that will be caught by middleware and allow for
-   * token refreshing.
-   */
-  app.get('/checktoken', (req, res, next) => {
-    const token = req.headers.Authorization ?
-                  req.headers.Authorization.replace("Bearer ","") :
-                  req.accessToken;
-    res.send({ access_token: token })
-  });
-
-  /**
    * Call to revoke (logout) on the gpoauth server
    */
   app.get('/revoke', (req, res, next) => {

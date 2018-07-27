@@ -179,6 +179,7 @@ module.exports = function(CONFIG, emitter){
   function sendRefreshErrorEvent(err, req, res, next){
     // Send empty Bearer token to client to clear the expired JWT
     res.header('Authorization', 'Bearer ');
+    LOGGER.debug("Removing browser token (empty Authorization header sent)")
 
     // Inform the application
     if(emitter.listenerCount('errorRefreshingAccessToken') > 0){
@@ -196,10 +197,10 @@ module.exports = function(CONFIG, emitter){
 
   // ======================= Exposing ========================
   return {
-    fetchJWTSignature: fetchJWTSignature,
-    requestTokenFromGrantCode: requestTokenFromGrantCode,
-    requestTokenFromRefreshToken: requestTokenFromRefreshToken,
-    getUserProfile: getUserProfile,
-    sendRefreshErrorEvent: sendRefreshErrorEvent
+    fetchJWTSignature,
+    requestTokenFromGrantCode,
+    requestTokenFromRefreshToken,
+    getUserProfile,
+    sendRefreshErrorEvent
   }
 }
