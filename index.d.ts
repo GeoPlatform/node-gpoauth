@@ -31,6 +31,7 @@ type JWT = {
     nonce: string
     iat: number
     exp: number
+    implicit?: boolean
   }
 
 // UserProfile from gpoauth

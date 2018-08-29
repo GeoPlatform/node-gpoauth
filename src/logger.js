@@ -27,7 +27,12 @@ module.exports = function(DEBUG){
    */
   function debug(/* arguments */){
     if(DEBUG === true || DEBUG === 'true')
-      console.log.apply(this, [`${color.FgGreen}[node-gpoauth ${(new Date()).toLocaleTimeString()}] ${color.Reset}`].concat(Array.prototype.slice.call(arguments)))
+      console.log.apply(this, [`${color.FgGreen}[${timeWithMilliseconds()}] ${color.Reset}`].concat(Array.prototype.slice.call(arguments)))
+  }
+
+  function timeWithMilliseconds(){
+    const d = new Date();
+    return `${d.toLocaleDateString()} ${d.toLocaleTimeString()}.${d.getMilliseconds()}`
   }
 
   /**
