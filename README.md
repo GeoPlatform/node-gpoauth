@@ -99,6 +99,7 @@ The following are the fields that can be on the configurartion object sent to no
 |---|---|---|---|
 |REFRESH_DEBOUNCE| int | Milliseconds to delay the request for a refresh token. This will allow requests to queue and all return at once when the token has been succesfully refreshed. | 250 |
 |PRE_REFRESH_BUFFER| int | Milliseconds before token expires to initiate a pre-expiration refresh request. This is helpful when requests will be passed to another service to prevnet token expiration during that request. | 250 |
+|REFRESH_LINGER| int | Milliseconds to delay purging refresh token. This is used for slow network traffic or high concurrent request volume. | 250 |
 |AUTH_DEBUG| boolean | If true print out debug information from node-gpoauth | false |
 
 <br><br>

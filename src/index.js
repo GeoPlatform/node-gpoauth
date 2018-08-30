@@ -1,6 +1,7 @@
 const configError = require('./logger.js')(false).formalConfigError;
 class MyEmitter extends require('events') {}
 const tokenCache = require('./tokenCache.js')
+const package = require('../package.json')
 
 /**
  * Node-gpoauth
@@ -28,7 +29,8 @@ module.exports = function(app, userConf) {
     AUTH_TYPE: "grant",
     SCOPES: 'read',
     REFRESH_DEBOUNCE: 250,
-    PRE_REFRESH_BUFFER: 250
+    PRE_REFRESH_BUFFER: 250,
+    REFRESH_LINGER: 250
   }
 
   // Validate passed in config
@@ -63,7 +65,7 @@ module.exports = function(app, userConf) {
     .then(sig => tokenCache.setSignature(sig))
     .catch(err => console.error(err))
 
-    LOGGER.debug(` ======== node-gpoauth - ${process.env.npm_package_version} ======== `)
+    LOGGER.debug(` ======== node-gpoauth - ${package.version} ======== `)
     LOGGER.debug('  Debugger Enabled ')
     LOGGER.debug('Config: ')
     LOGGER.debug(CONFIG)

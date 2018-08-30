@@ -223,11 +223,17 @@ module.exports = function(CONFIG, emitter){
               res.header('Authorization', 'Bearer ' + newAccessToken);
               LOGGER.debug(`Authorization token sent to browser: '${color.FgBlue}Bearer ${LOGGER.tokenDemo(newAccessToken)}${color.Reset}'`)
 
-              // Remove old & add new refreshTokens to cache.
-              tokenCache.remove(oldAccessToken);
+              // Add new refresh token to the cache
               tokenCache.add(newAccessToken, newRefreshToken);
-              delete refreshQueue[oldAccessToken];
-              LOGGER.debug(`TokenCache updated - added: ${LOGGER.tokenDemo(newAccessToken)} | removed: ${LOGGER.tokenDemo(oldAccessToken)}`)
+              LOGGER.debug(`TokenCache updated - added: ${LOGGER.tokenDemo(newAccessToken)}`)
+
+              // DT-2048: allow refreshToken to linger for delayed
+              setTimeout(() => {
+                // Remove old & add new refreshTokens to cache.
+                tokenCache.remove(oldAccessToken);
+                delete refreshQueue[oldAccessToken];
+                LOGGER.debug(`TokenCache updated - removed: ${LOGGER.tokenDemo(oldAccessToken)}`)
+              }, CONFIG.REFRESH_LINGER)
 
               // Pass back to verifyJWT for processing
               refreshQueueRecord.queue.map(r => {
