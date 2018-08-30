@@ -11,7 +11,10 @@ let oauth_signature;
 /**
  * Associative Array of:
  * {
- *    AccessTokens: RefreshToken
+ *    String<AccessToken>: {
+ *      refreshToken: String<RefreshToken>
+ *      newAccessToken: String<AccessToken>
+ *    }
  * }
  *
  * We use Access Tokens as keys because we are able to validate them with the
@@ -24,14 +27,37 @@ let cache = {};
  * Add an token to the cache
  */
 function add(accessToken, refreshToken) {
-  cache[accessToken] = refreshToken;
+  const entry = {
+    refreshToken: refreshToken,
+    newAccessToken: null
+  }
+  cache[accessToken] = entry;
+  return entry;
 }
 
 /**
  * Get a refresh token for given accessToken
  */
 function getRefreshToken(accessToken){
-  return cache[accessToken]
+  return cache[accessToken] && cache[accessToken].refreshToken
+}
+
+function setNewAccessToken(accessToken, newAccessToken) {
+  const data = cache[accessToken]
+  data.newAccessToken = newAccessToken;
+  return data
+}
+
+function hasBeenRefreshed(accessToken){
+  return !!getNewAccessToken(accessToken);
+}
+
+function getNewAccessToken(accessToken){
+  return cache[accessToken].newAccessToken
+}
+
+function getLatestToken(accessToken){
+  return getNewAccessToken(accessToken) || accessToken;
 }
 
 /**
@@ -72,12 +98,16 @@ function getSignature(){
 
 // exposing (...)
 module.exports = {
-  add: add,
-  pop: pop,
-  remove: remove,
-  getRefreshToken: getRefreshToken,
+  add,
+  getRefreshToken,
+  setNewAccessToken,
+  hasBeenRefreshed,
+  getNewAccessToken,
+  getLatestToken,
+  pop,
+  remove,
   // =======================
-  setSignature: setSignature,
-  getSignature: getSignature
+  setSignature,
+  getSignature
 }
 

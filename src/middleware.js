@@ -175,6 +175,22 @@ module.exports = function(CONFIG, emitter){
     let refreshQueue = {}
 
     /**
+     * Run reqeusts back through the validation process with new token.
+     *
+     * @param {*} refreshQueueRecord
+     * @param {*} newAccessToken
+     */
+    function reProcessReqeustWithNewToken(refreshQueueRecord, newAccessToken){
+        // Pass back to verifyJWT for processing
+        refreshQueueRecord.queue.map(r => {
+          // Update request with new token to pass validation (post refresh)
+          r.req.headers.authorization = `Bearer ${newAccessToken}`;
+          // Pass back to verify
+          verifyJWT(r.req, r.res, r.next)
+        })
+    }
+
+    /**
      * The function assigned to refreshAccessToken. This is the callable
      * function.
      *
@@ -184,71 +200,84 @@ module.exports = function(CONFIG, emitter){
      * @param {Middleware next} next - Express middleware next function
      */
     return function(oldAccessToken, req, res, next){
-      if(refreshQueue[oldAccessToken]){
-        // Debounce the call to fetch refresh token
-        clearTimeout(refreshQueue[oldAccessToken].request)
-        refreshQueue[oldAccessToken].queue.push({
-          req: req,
-          res: res,
-          next: next
-        });
-      } else {
-        // Add refreshQueue record if none existing for this oldAccessToken
-        refreshQueue[oldAccessToken] = {
-          request: null,
-          queue: [{
-            req: req,
-            res: res,
-            next: next
-          }]
-        }
-      }
-      let refreshQueueRecord = refreshQueue[oldAccessToken]
       const oldRefreshToken = tokenCache.getRefreshToken(oldAccessToken)
 
       if (!!oldRefreshToken) {
-        // Go ahead an fetch new AccessToken
-        refreshQueueRecord.request = setTimeout(() => {
-          LOGGER.debug(`-- Attempting AccessToken Refresh - Token: ${LOGGER.tokenDemo(oldAccessToken)} --`)
-          AUTH.requestTokenFromRefreshToken(oldRefreshToken)
-            .then(refResp => {
-              const newAccessToken = refResp.access_token;
-              const newRefreshToken = refResp.refresh_token;
 
-              LOGGER.debug("======= New Token =======")
-              LOGGER.debug('|| Access:  ' + LOGGER.tokenDemo(newAccessToken))
-              LOGGER.debug('|| Refresh: ' + LOGGER.tokenDemo(newRefreshToken))
-              LOGGER.debug("=========================")
+        // Token already refrehsed just pass along with new token
+        if(tokenCache.hasBeenRefreshed(oldAccessToken)){
+          const newest = tokenCache.getLatestToken(oldAccessToken);
+          LOGGER.debug(`${color.FgGreen} New AccessToken in cache, passing on request with new AccessToken: ${color.Reset} ${LOGGER.tokenDemo(oldAccessToken)} => ${LOGGER.tokenDemo(newest)}`)
+          req.headers.authorization = `Bearer ${newest}`;
+          verifyJWT(req, res, next)
 
-              res.header('Authorization', 'Bearer ' + newAccessToken);
-              LOGGER.debug(`Authorization token sent to browser: '${color.FgBlue}Bearer ${LOGGER.tokenDemo(newAccessToken)}${color.Reset}'`)
 
-              // Add new refresh token to the cache
-              tokenCache.add(newAccessToken, newRefreshToken);
-              LOGGER.debug(`TokenCache updated - added: ${LOGGER.tokenDemo(newAccessToken)}`)
+        // Token needs to be refreshed
+        } else {
 
-              // DT-2048: allow refreshToken to linger for delayed
-              setTimeout(() => {
-                // Remove old & add new refreshTokens to cache.
-                tokenCache.remove(oldAccessToken);
-                delete refreshQueue[oldAccessToken];
-                LOGGER.debug(`TokenCache updated - removed: ${LOGGER.tokenDemo(oldAccessToken)}`)
-              }, CONFIG.REFRESH_LINGER)
+          if(refreshQueue[oldAccessToken]){
+            // Debounce the call to fetch refresh token
+            clearTimeout(refreshQueue[oldAccessToken].request)
+            refreshQueue[oldAccessToken].queue.push({ req, res, next });
+          } else {
+            // Add refreshQueue record if none existing for this oldAccessToken
+            refreshQueue[oldAccessToken] = {
+              request: null,
+              queue: [{ req, res, next }]
+            }
+          }
 
-              // Pass back to verifyJWT for processing
-              refreshQueueRecord.queue.map(r => {
-                // Update request with new token to pass validation (post refresh)
-                r.req.headers.authorization = `Bearer ${newAccessToken}`;
-                // Pass back to verify
-                verifyJWT(r.req, r.res, r.next)
+          let refreshQueueRecord = refreshQueue[oldAccessToken]
+
+          // Go ahead an fetch new AccessToken
+          refreshQueueRecord.request = setTimeout(() => {
+            LOGGER.debug(`-- Attempting AccessToken Refresh - Token: ${LOGGER.tokenDemo(oldAccessToken)} --`)
+            AUTH.requestTokenFromRefreshToken(oldRefreshToken)
+              .then(refResp => {
+                const newAccessToken = refResp.access_token;
+                const newRefreshToken = refResp.refresh_token;
+
+                LOGGER.debug("======= New Token =======")
+                LOGGER.debug('|| Access:  ' + LOGGER.tokenDemo(newAccessToken))
+                LOGGER.debug('|| Refresh: ' + LOGGER.tokenDemo(newRefreshToken))
+                LOGGER.debug("=========================")
+
+                // Update Cache with new AccessToken
+                tokenCache.setNewAccessToken(oldAccessToken, newAccessToken)
+                LOGGER.debug(`-- Added newAccessToken to old TokenCache --`)
+
+
+                // Add new refresh token to the cache
+                tokenCache.add(newAccessToken, newRefreshToken);
+                LOGGER.debug(`TokenCache updated - added: ${LOGGER.tokenDemo(newAccessToken)}`)
+
+                res.header('Authorization', 'Bearer ' + newAccessToken);
+                LOGGER.debug(`Authorization token sent to browser: '${color.FgBlue}Bearer ${LOGGER.tokenDemo(newAccessToken)}${color.Reset}'`)
+
+                // DT-2048: allow refreshToken to linger for delayed
+                setTimeout(() => {
+                  // Remove old & add new refreshTokens to cache.
+                  tokenCache.remove(oldAccessToken);
+                  delete refreshQueue[oldAccessToken];
+                  LOGGER.debug(`TokenCache updated - removed: ${LOGGER.tokenDemo(oldAccessToken)}`)
+                }, CONFIG.REFRESH_LINGER)
+
+                reProcessReqeustWithNewToken(refreshQueueRecord, newAccessToken)
+                // // Pass back to verifyJWT for processing
+                // refreshQueueRecord.queue.map(r => {
+                //   // Update request with new token to pass validation (post refresh)
+                //   r.req.headers.authorization = `Bearer ${newAccessToken}`;
+                //   // Pass back to verify
+                //   verifyJWT(r.req, r.res, r.next)
+                // })
               })
-            })
-            .catch(err => {
-              LOGGER.debug(`${color.FgRed}=== Error on refresh token: ===${color.Reset}`);
-              LOGGER.debug(err.message)
-              AUTH.sendRefreshErrorEvent(err, req, res, next);
-            })
-        }, CONFIG.REFRESH_DEBOUNCE);
+              .catch(err => {
+                LOGGER.debug(`${color.FgRed}=== Error on refresh token: ===${color.Reset}`);
+                LOGGER.debug(err.message)
+                AUTH.sendRefreshErrorEvent(err, req, res, next);
+              })
+          }, CONFIG.REFRESH_DEBOUNCE);
+        }
 
       } else {
         const msg = `${color.FgRed}Error on refresh token: No valid refresh token found for accessToken${color.Reset} ${LOGGER.tokenDemo(oldAccessToken)}`
