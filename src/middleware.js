@@ -207,7 +207,7 @@ module.exports = function(CONFIG, emitter){
         // Token already refrehsed just pass along with new token
         if(tokenCache.hasBeenRefreshed(oldAccessToken)){
           const newest = tokenCache.getLatestToken(oldAccessToken);
-          LOGGER.debug(`${color.FgGreen} New AccessToken in cache, passing on request with new AccessToken: ${color.Reset} ${LOGGER.tokenDemo(oldAccessToken)} => ${LOGGER.tokenDemo(newest)}`)
+          LOGGER.debug(`${color.FgGreen}New AccessToken in cache, passing on request with new AccessToken: ${color.Reset} ${LOGGER.tokenDemo(oldAccessToken)} => ${LOGGER.tokenDemo(newest)}`)
           req.headers.authorization = `Bearer ${newest}`;
           verifyJWT(req, res, next)
 

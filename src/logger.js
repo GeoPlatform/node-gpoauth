@@ -32,7 +32,7 @@ module.exports = function(DEBUG){
 
   function timeWithMilliseconds(){
     const d = new Date();
-    return `${d.toLocaleDateString()} ${d.toLocaleTimeString()}.${d.getMilliseconds()}`
+    return `${d.toLocaleDateString()} ${d.toLocaleTimeString()}.${(d.getMilliseconds() + "000").substr(0,3)}`
   }
 
   /**
