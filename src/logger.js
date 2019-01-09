@@ -27,12 +27,7 @@ module.exports = function(DEBUG){
    */
   function debug(/* arguments */){
     if(DEBUG === true || DEBUG === 'true')
-      console.log.apply(this, [`${color.FgGreen}[${timeWithMilliseconds()}] ${color.Reset}`].concat(Array.prototype.slice.call(arguments)))
-  }
-
-  function timeWithMilliseconds(){
-    const d = new Date();
-    return `${d.toLocaleDateString()} ${d.toLocaleTimeString()}.${(d.getMilliseconds() + "000").substr(0,3)}`
+      console.log.apply(this, [`${color.FgGreen}[${(new Date()).toISOString()}] ${color.Reset}`].concat(Array.prototype.slice.call(arguments)))
   }
 
   /**
