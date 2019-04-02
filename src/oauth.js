@@ -2,6 +2,9 @@ const request = require('request');
 const color = require('./consoleColors.js')
 const jwt = require('jsonwebtoken');
 
+// DT-2491: clear revoke signal to broswer
+const REVOKE_RESPONSE = '<REVOKED>';
+
 /**
  * oauth.js
  *
@@ -178,7 +181,7 @@ module.exports = function(CONFIG, emitter){
    */
   function sendRefreshErrorEvent(err, req, res, next){
     // Send empty Bearer token to client to clear the expired JWT
-    res.header('Authorization', 'Bearer ');
+    res.header('Authorization', REVOKE_RESPONSE);
     LOGGER.debug("Removing browser token (empty Authorization header sent)")
 
     // Inform the application
