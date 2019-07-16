@@ -1,5 +1,5 @@
 {
-  "name": "@geoplatform/oauth/node",
+  "name": "@geoplatform/oauth-node",
   "version": "1.3.0",
   "description": "GPOAuth Node Module",
   "homepage": "idp.geoplatform.gov",
