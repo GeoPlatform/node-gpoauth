@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
 const tokenCache = require('./tokenCache.js');
 const color = require('./consoleColors.js')
+const REVOKE_RESPONSE = require('./Constants.json').REVOKE_RESPONSE
 
 /**
  * Get the accessToken from request.
@@ -237,43 +238,55 @@ module.exports = function(CONFIG, emitter){
                 const newAccessToken = refResp.access_token;
                 const newRefreshToken = refResp.refresh_token;
 
-                LOGGER.debug("======= New Token =======")
-                LOGGER.debug('|| Access:  ' + LOGGER.tokenDemo(newAccessToken))
-                LOGGER.debug('|| Refresh: ' + LOGGER.tokenDemo(newRefreshToken))
-                LOGGER.debug("=========================")
+                if(newAccessToken) {
+                  LOGGER.debug("== Refresh Succeeded ==")
+                  LOGGER.debug("======= New Token =======")
+                  LOGGER.debug('|| Access:  ' + LOGGER.tokenDemo(newAccessToken))
+                  LOGGER.debug('|| Refresh: ' + LOGGER.tokenDemo(newRefreshToken))
+                  LOGGER.debug("=========================")
 
-                // Update Cache with new AccessToken
-                tokenCache.setNewAccessToken(oldAccessToken, newAccessToken)
-                LOGGER.debug(`-- Added newAccessToken to old TokenCache --`)
+                  // Update Cache with new AccessToken
+                  tokenCache.setNewAccessToken(oldAccessToken, newAccessToken)
+                  LOGGER.debug(`-- Added newAccessToken to old TokenCache --`)
+
+                  // Add new refresh token to the cache
+                  tokenCache.add(newAccessToken, newRefreshToken);
+                  LOGGER.debug(`TokenCache updated - added: ${LOGGER.tokenDemo(newAccessToken)}`)
+
+                  res.header('Authorization', 'Bearer ' + newAccessToken);
+                  LOGGER.debug(`Authorization token sent to browser: '${color.FgBlue}Bearer ${LOGGER.tokenDemo(newAccessToken)}${color.Reset}'`)
+
+                  // DT-2048: allow refreshToken to linger for delayed
+                  setTimeout(() => {
+                    // Remove old & add new refreshTokens to cache.
+                    tokenCache.remove(oldAccessToken);
+                    delete refreshQueue[oldAccessToken];
+                    LOGGER.debug(`TokenCache updated - removed: ${LOGGER.tokenDemo(oldAccessToken)}`)
+                  }, CONFIG.REFRESH_LINGER)
+
+                  reProcessReqeustWithNewToken(refreshQueueRecord, newAccessToken)
+                  // // Pass back to verifyJWT for processing
+                  // refreshQueueRecord.queue.map(r => {
+                  //   // Update request with new token to pass validation (post refresh)
+                  //   r.req.headers.authorization = `Bearer ${newAccessToken}`;
+                  //   // Pass back to verify
+                  //   verifyJWT(r.req, r.res, r.next)
+                  // })
 
 
-                // Add new refresh token to the cache
-                tokenCache.add(newAccessToken, newRefreshToken);
-                LOGGER.debug(`TokenCache updated - added: ${LOGGER.tokenDemo(newAccessToken)}`)
-
-                res.header('Authorization', 'Bearer ' + newAccessToken);
-                LOGGER.debug(`Authorization token sent to browser: '${color.FgBlue}Bearer ${LOGGER.tokenDemo(newAccessToken)}${color.Reset}'`)
-
-                // DT-2048: allow refreshToken to linger for delayed
-                setTimeout(() => {
-                  // Remove old & add new refreshTokens to cache.
-                  tokenCache.remove(oldAccessToken);
-                  delete refreshQueue[oldAccessToken];
+                // Refresh failed
+                } else {
+                  LOGGER.debug(`-- Refresh Failed : no tokens returned from IDP refresh (refresh token had likely expired) --`)
+                  tokenCache.remove(oldAccessToken)
                   LOGGER.debug(`TokenCache updated - removed: ${LOGGER.tokenDemo(oldAccessToken)}`)
-                }, CONFIG.REFRESH_LINGER)
+                  AUTH.sendRefreshErrorEvent(new Error('Failed to refresh token with IDP service.'), req, res, next);
+                }
 
-                reProcessReqeustWithNewToken(refreshQueueRecord, newAccessToken)
-                // // Pass back to verifyJWT for processing
-                // refreshQueueRecord.queue.map(r => {
-                //   // Update request with new token to pass validation (post refresh)
-                //   r.req.headers.authorization = `Bearer ${newAccessToken}`;
-                //   // Pass back to verify
-                //   verifyJWT(r.req, r.res, r.next)
-                // })
               })
               .catch(err => {
                 LOGGER.debug(`${color.FgRed}=== Error on refresh token: ===${color.Reset}`);
                 LOGGER.debug(err.message)
+                tokenCache.remove(oldAccessToken)
                 AUTH.sendRefreshErrorEvent(err, req, res, next);
               })
           }, CONFIG.REFRESH_DEBOUNCE);
