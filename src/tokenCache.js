@@ -44,7 +44,8 @@ function getRefreshToken(accessToken){
 
 function setNewAccessToken(accessToken, newAccessToken) {
   const data = cache[accessToken]
-  data.newAccessToken = newAccessToken;
+  if (data)
+    data.newAccessToken = newAccessToken;
   return data
 }
 
