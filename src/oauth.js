@@ -3,7 +3,7 @@ const color = require('./consoleColors.js')
 const jwt = require('jsonwebtoken');
 
 // DT-2491: clear revoke signal to broswer
-const REVOKE_RESPONSE = '<REVOKED>';
+const REVOKE_RESPONSE = require('./Constants.json').REVOKE_RESPONSE
 
 /**
  * oauth.js
