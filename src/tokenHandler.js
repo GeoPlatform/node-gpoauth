@@ -60,7 +60,7 @@ function getAccessToken(req){
   const cookie = req.cookies
               && req.cookies[ACCESS_TOKEN_COOKIE]
               && base64Decode(req.cookies[ACCESS_TOKEN_COOKIE])
-  const header = (req.headers.authorization || '').replace('Bearer ','');
+  const header = ((req.headers && req.headers.authorization) || '').replace('Bearer ','');
 
   return cookie || header
 }

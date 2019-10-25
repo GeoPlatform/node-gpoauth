@@ -155,10 +155,7 @@ module.exports = function(CONFIG, emitter){
   }
 
 
-  // TODO: lift from inside the refreshDebound to get data here
-  // function refreshAccessToken(){
 
-  // }
 
 
   /**
@@ -213,6 +210,34 @@ module.exports = function(CONFIG, emitter){
     }
 
     /**
+     * The actual work of refreshing a token
+     *
+     * @param {*} refreshQueueRecord
+     * @param {*} req
+     * @param {*} res
+     * @param {*} next
+     */
+    async function refreshAccessToken(req){
+      const expiredAccessToken = tokenHandler.getAccessToken(req)
+      const oldRefreshToken = tokenHandler.getRefreshToken(req)
+
+      LOGGER.debug(`-- Attempting AccessToken Refresh - Token: ${LOGGER.tokenDemo(expiredAccessToken)} --`)
+      return AUTH.requestTokenFromRefreshToken(oldRefreshToken)
+            .then(refResp => {
+              LOGGER.debug("=== Refresh Succeeded ===")
+              LOGGER.debug("======= New Token =======")
+              LOGGER.debug('|| Access:  ' + LOGGER.tokenDemo(refResp.access_token))
+              LOGGER.debug('|| Refresh: ' + LOGGER.tokenDemo(refResp.refresh_token))
+              LOGGER.debug("=========================")
+
+              return {
+                access_token: refResp.access_token,
+                refresh_token: refResp.refresh_token
+              }
+            })
+    }
+
+    /**
      * The function assigned to refreshAccessToken. This is the callable
      * function.
      *
@@ -222,8 +247,6 @@ module.exports = function(CONFIG, emitter){
      * @param {Middleware next} next - Express middleware next function
      */
     return function(expiredAccessToken, req, res, next){
-      const oldRefreshToken = tokenHandler.getRefreshToken(req)
-
       // Debounce
       let refreshQueueRecord = refreshQueue[expiredAccessToken]
       if(refreshQueueRecord){
@@ -244,28 +267,18 @@ module.exports = function(CONFIG, emitter){
       // Go ahead an fetch new AccessToken
       // TODO: lift this function at some point....
       refreshQueueRecord.request = setTimeout(() => {
-        LOGGER.debug(`-- Attempting AccessToken Refresh - Token: ${LOGGER.tokenDemo(expiredAccessToken)} --`)
-        AUTH.requestTokenFromRefreshToken(oldRefreshToken)
-          .then(refResp => {
-            const newAccessToken = refResp.access_token;
-            const newRefreshToken = refResp.refresh_token;
+        refreshAccessToken(req)
+          .then(tokens => {
+            if (tokens.access_token){
+              tokenHandler.setTokens(res, tokens.access_token, tokens.refresh_token)
+              reProcessReqeustWithNewToken(refreshQueueRecord, tokens.access_token, tokens.refresh_token)
 
-            if(newAccessToken) {
-              LOGGER.debug("== Refresh Succeeded ==")
-              LOGGER.debug("======= New Token =======")
-              LOGGER.debug('|| Access:  ' + LOGGER.tokenDemo(newAccessToken))
-              LOGGER.debug('|| Refresh: ' + LOGGER.tokenDemo(newRefreshToken))
-              LOGGER.debug("=========================")
-
-              tokenHandler.setTokens(res, newAccessToken, newRefreshToken)
-              reProcessReqeustWithNewToken(refreshQueueRecord, newAccessToken, newRefreshToken)
-
-            // Refresh failed
             } else {
               LOGGER.debug(`-- Refresh Failed : no tokens returned from IDP refresh (refresh token had likely expired) --`)
               tokenHandler.clearTokens(res)
               AUTH.sendRefreshErrorEvent(new Error('Failed to refresh token with IDP service.'), req, res, next);
             }
+
           })
           .catch(err => {
             LOGGER.debug(`${color.FgRed}=== Error on refresh token: ===${color.Reset}`);
