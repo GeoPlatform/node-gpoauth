@@ -1,17 +1,8 @@
 
 const request = require('request');
 const color = require('./consoleColors');
-const tokenCache = require('./tokenCache');
 const jwt = require('jsonwebtoken');
-
-/**
- * Get the accessToken from request.
- *
- * @param {Request} req
- */
-function getToken(req){
-  return (req.headers.authorization || '').replace('Bearer ','');
-}
+const tokenHandler = require('./tokenHandler.js')
 
 /**
  * Send accessToken to broswer via the query string.
@@ -150,11 +141,9 @@ module.exports = function(CONFIG, app, emitter){
       .then(tokenResp => {
         const accessToken = tokenResp.access_token;
         const refreshToken = tokenResp.refresh_token;
+        tokenHandler.setTokens(res, accessToken, refreshToken)
           LOGGER.debug(`Response from exchange: `, getPrettyRespone(tokenResp))
           LOGGER.debug(`Tokens recieved: Access - ${LOGGER.tokenDemo(accessToken)} | Refresh - ${LOGGER.tokenDemo(refreshToken)}`)
-
-        // cache the refreshToken
-        tokenCache.add(accessToken, refreshToken)
           LOGGER.debug("User Authenticated - JWT:", jwt.decode(accessToken))
 
         // Call again to get user data and notifiy application that user has authenticated
@@ -189,7 +178,8 @@ module.exports = function(CONFIG, app, emitter){
           }
         })
         .catch(err => {
-          console.error(LOGGER.formalError("Error exchanging grant for access token (JWT)\nUser was not authenticated."))
+          // console.log(err)
+          console.error(LOGGER.formalError("Error exchanging grant for access token (JWT)\nUser was not authenticated.", err))
           // Don't crash user applicaiton for this. Pass them thorugh without a token
           res.redirect(URL);
         })
@@ -215,8 +205,8 @@ module.exports = function(CONFIG, app, emitter){
    * Call to revoke (logout) on the gpoauth server
    */
   app.get('/revoke', (req, res, next) => {
-    const accessToken = getToken(req);
-      LOGGER.debug(`Request Revoke Token - Token : ${LOGGER.tokenDemo(accessToken)}`)
+    const accessToken = tokenHandler.getAccessToken(req);
+    LOGGER.debug(`Request Revoke Token - Token : ${LOGGER.tokenDemo(accessToken)}`)
 
     // Make the call to revoke the token
     request({
@@ -226,7 +216,7 @@ module.exports = function(CONFIG, app, emitter){
     }, function(error, response) {
       if (error) res.status(500).send(error)
 
-      tokenCache.remove(accessToken)
+      tokenHandler.clearTokens(res)
       emitter.emit('accessTokenRevoked', jwt.decode(accessToken), accessToken);
         LOGGER.debug(`Token successfully revoked - Token : ${LOGGER.tokenDemo(accessToken)}`)
 

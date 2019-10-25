@@ -1,16 +1,8 @@
 const jwt = require('jsonwebtoken');
-const tokenCache = require('./tokenCache.js');
 const color = require('./consoleColors.js')
-const REVOKE_RESPONSE = require('./Constants.json').REVOKE_RESPONSE
+const tokenHandler = require('./tokenHandler.js')
 
-/**
- * Get the accessToken from request.
- *
- * @param {Request} req
- */
-function getToken(req){
-  return (req.headers.authorization || '').replace('Bearer ','');
-}
+
 
 /**
  * node-gpoauth middleware
@@ -65,6 +57,30 @@ module.exports = function(CONFIG, emitter){
     return now >= (exp - buffer);
   }
 
+  /**
+   * Grant access with given token.
+   *
+   *
+   * @param {JWT} accessToken
+   * @param {Request} req
+   * @param {Response} res
+   * @param {function} next
+   */
+  function grantAccess(req, res, next){
+    const accessToken = tokenHandler.getAccessToken()
+    const JWT = tokenHandler.getJWT()
+
+    req.accessToken = accessToken
+    req.jwt = JWT
+    LOGGER.logRequest('Access Granted', accessToken, req)
+
+    if(emitter.listenerCount('accessGranted') > 0){
+      emitter.emit('accessGranted', req, res, next);
+    } else {
+      next();
+    }
+  }
+
 
   /**************** Middleware ****************/
 
@@ -87,13 +103,13 @@ module.exports = function(CONFIG, emitter){
       return // end execution
     }
 
-    const accessToken = getToken(req);
+    const accessToken = tokenHandler.getAccessToken(req);
 
-    if(!tokenCache.getSignature()){
+    if(!tokenHandler.getSignature()){
       // Git the signature then try again
       AUTH.fetchJWTSignature()
         .then(sig => {
-          tokenCache.setSignature(sig);
+          tokenHandler.setSignature(sig);
           verifyJWT(req, res, next)/* try again */
         })
         .catch(err => {
@@ -104,27 +120,30 @@ module.exports = function(CONFIG, emitter){
     // Do the actual validtion here
     } else {
       try {
-        const decoded = jwt.verify(accessToken, tokenCache.getSignature());
+        const jwt = tokenHandler.validateAccessToken(accessToken)
 
         // Force refresh if withing REFRESH_DEBOUNCE buffer
         const now = (new Date()).getTime();
-        if(needsRefreshed(now, decoded.exp * 1000, CONFIG.PRE_REFRESH_BUFFER))
+        if(needsRefreshed(now, jwt.exp * 1000, CONFIG.PRE_REFRESH_BUFFER))
           throw new jwt.TokenExpiredError('Token is past PRE_REFRESH_BUFFER limit', now - CONFIG.PRE_REFRESH_BUFFER);
 
-        req.jwt = decoded
-        req.accessToken = accessToken
-          LOGGER.logRequest('Access Granted', accessToken, req)
-
-        if(emitter.listenerCount('accessGranted') > 0){
-          emitter.emit('accessGranted', req, res, next);
-        } else {
-          next();
-        }
+        // Pass them through
+        grantAccess(req, res, next)
 
       } catch(err) {
         if (err instanceof jwt.TokenExpiredError) {
-          LOGGER.logRequest(`Expired token used: ${err}`, accessToken, req)
-          refreshAccessToken(accessToken, req, res, next);
+          // DT-2048: allow refreshToken to linger for delayed (CONFIG.REFRESH_LINGER))
+          const NOW = (new Date()).getTime() / 1000
+          const MAX_ALLOWED = (new Date(accessToken.exp + CONFIG.REFRESH_LINGER)).getTime() / 1000
+          if(NOW >= MAX_ALLOWED){
+            // Allow them through because time left on linger
+            grantAccess(req, res, next)
+
+          } else {
+            // Past MAX_ALLOWS : token is actually expired
+            LOGGER.logRequest(`Expired token used: ${err}`, accessToken, req)
+            refreshDebounce(accessToken, req, res, next);
+          }
 
         } else {
           // Call the listener 'unauthorizedRequest' handler if registered
@@ -136,23 +155,24 @@ module.exports = function(CONFIG, emitter){
   }
 
 
+  // TODO: lift from inside the refreshDebound to get data here
+  // function refreshAccessToken(){
+
+  // }
+
+
   /**
    * Takes an expired AccessToken and exchanges it for a new one (via a
    * refreshToken). This funtion will debounce requests with the same AccessToken
    * and resolve all of them together (once the new token is aquired).
    *
-   * External Deps:
-   *  - tokenCache: a TokenCache instance
-   *
    * Side effects:
-   *  - Adds a new AccessToken / RefreshToken pair to tokenCache
-   *  - Removes expired AccessToken / RefreshToken pair from tokenCache
-   *  - sets the Authorization header on the response object on successful refresh
+   *  - sets the access token in cookie on successful refresh
    *
    * @method refreshAccessToken
    * @see returned function for params list
    */
-  const refreshAccessToken = (function(){
+  const refreshDebounce = (function(){
     // encloing scope: private variables for returned function
 
    /*
@@ -181,11 +201,12 @@ module.exports = function(CONFIG, emitter){
      * @param {*} refreshQueueRecord
      * @param {*} newAccessToken
      */
-    function reProcessReqeustWithNewToken(refreshQueueRecord, newAccessToken){
+    function reProcessReqeustWithNewToken(refreshQueueRecord, newAccessToken, newRefreshToken){
         // Pass back to verifyJWT for processing
         refreshQueueRecord.queue.map(r => {
           // Update request with new token to pass validation (post refresh)
-          r.req.headers.authorization = `Bearer ${newAccessToken}`;
+          tokenHandler.setTokens(r.res, newAccessToken, newRefreshToken)
+
           // Pass back to verify
           verifyJWT(r.req, r.res, r.next)
         })
@@ -200,103 +221,59 @@ module.exports = function(CONFIG, emitter){
      * @param {Response} res - Express response object
      * @param {Middleware next} next - Express middleware next function
      */
-    return function(oldAccessToken, req, res, next){
-      const oldRefreshToken = tokenCache.getRefreshToken(oldAccessToken)
+    return function(expiredAccessToken, req, res, next){
+      const oldRefreshToken = tokenHandler.getRefreshToken(req)
 
-      if (!!oldRefreshToken) {
-
-        // Token already refrehsed just pass along with new token
-        if(tokenCache.hasBeenRefreshed(oldAccessToken)){
-          const newest = tokenCache.getLatestToken(oldAccessToken);
-          LOGGER.debug(`${color.FgGreen}New AccessToken in cache, passing on request with new AccessToken: ${color.Reset} ${LOGGER.tokenDemo(oldAccessToken)} => ${LOGGER.tokenDemo(newest)}`)
-          req.headers.authorization = `Bearer ${newest}`;
-          verifyJWT(req, res, next)
-
-
-        // Token needs to be refreshed
-        } else {
-
-          if(refreshQueue[oldAccessToken]){
-            // Debounce the call to fetch refresh token
-            clearTimeout(refreshQueue[oldAccessToken].request)
-            refreshQueue[oldAccessToken].queue.push({ req, res, next });
-          } else {
-            // Add refreshQueue record if none existing for this oldAccessToken
-            refreshQueue[oldAccessToken] = {
-              request: null,
-              queue: [{ req, res, next }]
-            }
-          }
-
-          let refreshQueueRecord = refreshQueue[oldAccessToken]
-
-          // Go ahead an fetch new AccessToken
-          refreshQueueRecord.request = setTimeout(() => {
-            LOGGER.debug(`-- Attempting AccessToken Refresh - Token: ${LOGGER.tokenDemo(oldAccessToken)} --`)
-            AUTH.requestTokenFromRefreshToken(oldRefreshToken)
-              .then(refResp => {
-                const newAccessToken = refResp.access_token;
-                const newRefreshToken = refResp.refresh_token;
-
-                if(newAccessToken) {
-                  LOGGER.debug("== Refresh Succeeded ==")
-                  LOGGER.debug("======= New Token =======")
-                  LOGGER.debug('|| Access:  ' + LOGGER.tokenDemo(newAccessToken))
-                  LOGGER.debug('|| Refresh: ' + LOGGER.tokenDemo(newRefreshToken))
-                  LOGGER.debug("=========================")
-
-                  // Update Cache with new AccessToken
-                  tokenCache.setNewAccessToken(oldAccessToken, newAccessToken)
-                  LOGGER.debug(`-- Added newAccessToken to old TokenCache --`)
-
-                  // Add new refresh token to the cache
-                  tokenCache.add(newAccessToken, newRefreshToken);
-                  LOGGER.debug(`TokenCache updated - added: ${LOGGER.tokenDemo(newAccessToken)}`)
-
-                  res.header('Authorization', 'Bearer ' + newAccessToken);
-                  LOGGER.debug(`Authorization token sent to browser: '${color.FgBlue}Bearer ${LOGGER.tokenDemo(newAccessToken)}${color.Reset}'`)
-
-                  // DT-2048: allow refreshToken to linger for delayed
-                  setTimeout(() => {
-                    // Remove old & add new refreshTokens to cache.
-                    tokenCache.remove(oldAccessToken);
-                    delete refreshQueue[oldAccessToken];
-                    LOGGER.debug(`TokenCache updated - removed: ${LOGGER.tokenDemo(oldAccessToken)}`)
-                  }, CONFIG.REFRESH_LINGER)
-
-                  reProcessReqeustWithNewToken(refreshQueueRecord, newAccessToken)
-                  // // Pass back to verifyJWT for processing
-                  // refreshQueueRecord.queue.map(r => {
-                  //   // Update request with new token to pass validation (post refresh)
-                  //   r.req.headers.authorization = `Bearer ${newAccessToken}`;
-                  //   // Pass back to verify
-                  //   verifyJWT(r.req, r.res, r.next)
-                  // })
-
-
-                // Refresh failed
-                } else {
-                  LOGGER.debug(`-- Refresh Failed : no tokens returned from IDP refresh (refresh token had likely expired) --`)
-                  tokenCache.remove(oldAccessToken)
-                  LOGGER.debug(`TokenCache updated - removed: ${LOGGER.tokenDemo(oldAccessToken)}`)
-                  AUTH.sendRefreshErrorEvent(new Error('Failed to refresh token with IDP service.'), req, res, next);
-                }
-
-              })
-              .catch(err => {
-                LOGGER.debug(`${color.FgRed}=== Error on refresh token: ===${color.Reset}`);
-                LOGGER.debug(err.message)
-                tokenCache.remove(oldAccessToken)
-                AUTH.sendRefreshErrorEvent(err, req, res, next);
-              })
-          }, CONFIG.REFRESH_DEBOUNCE);
-        }
-
+      // Debounce
+      let refreshQueueRecord = refreshQueue[expiredAccessToken]
+      if(refreshQueueRecord){
+        // Debounce the call to fetch refresh token
+        clearTimeout(refreshQueueRecord.request)
+        refreshQueueRecord.queue.push({ req, res, next });
       } else {
-        const msg = `${color.FgRed}Error on refresh token: No valid refresh token found for accessToken${color.Reset} ${LOGGER.tokenDemo(oldAccessToken)}`
-        LOGGER.debug(msg);
-        AUTH.sendRefreshErrorEvent(new Error(msg), req, res, next)
+        // Add refreshQueue record if none existing for this oldAccessToken
+        refreshQueue[expiredAccessToken] = {
+          request: null,
+          queue: [{ req, res, next }]
+        }
       }
+
+      // Make sure we have the right record (post upsert)
+      refreshQueueRecord = refreshQueue[expiredAccessToken]
+
+      // Go ahead an fetch new AccessToken
+      // TODO: lift this function at some point....
+      refreshQueueRecord.request = setTimeout(() => {
+        LOGGER.debug(`-- Attempting AccessToken Refresh - Token: ${LOGGER.tokenDemo(expiredAccessToken)} --`)
+        AUTH.requestTokenFromRefreshToken(oldRefreshToken)
+          .then(refResp => {
+            const newAccessToken = refResp.access_token;
+            const newRefreshToken = refResp.refresh_token;
+
+            if(newAccessToken) {
+              LOGGER.debug("== Refresh Succeeded ==")
+              LOGGER.debug("======= New Token =======")
+              LOGGER.debug('|| Access:  ' + LOGGER.tokenDemo(newAccessToken))
+              LOGGER.debug('|| Refresh: ' + LOGGER.tokenDemo(newRefreshToken))
+              LOGGER.debug("=========================")
+
+              tokenHandler.setTokens(res, newAccessToken, newRefreshToken)
+              reProcessReqeustWithNewToken(refreshQueueRecord, newAccessToken, newRefreshToken)
+
+            // Refresh failed
+            } else {
+              LOGGER.debug(`-- Refresh Failed : no tokens returned from IDP refresh (refresh token had likely expired) --`)
+              tokenHandler.clearTokens(res)
+              AUTH.sendRefreshErrorEvent(new Error('Failed to refresh token with IDP service.'), req, res, next);
+            }
+          })
+          .catch(err => {
+            LOGGER.debug(`${color.FgRed}=== Error on refresh token: ===${color.Reset}`);
+            LOGGER.debug(err.message)
+            tokenHandler.clearTokens(res)
+            AUTH.sendRefreshErrorEvent(err, req, res, next);
+          })
+      }, CONFIG.REFRESH_DEBOUNCE);
     }
   })();
 

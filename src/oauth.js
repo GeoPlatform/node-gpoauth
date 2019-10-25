@@ -158,7 +158,7 @@ module.exports = function(CONFIG, emitter){
       request({
         uri: CONFIG.IDP_BASE_URL + '/api/profile',
         method: 'GET',
-        headers: { 'Authorization': 'Bearer ' + accessToken }
+        headers: { 'Authorization': `Bearer ${accessToken}` }
       }, function(error, response) {
         error ?
           reject(error) :

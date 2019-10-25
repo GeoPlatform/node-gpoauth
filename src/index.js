@@ -1,7 +1,7 @@
 const configError = require('./logger.js')(false).formalConfigError;
 class MyEmitter extends require('events') {}
-const tokenCache = require('./tokenCache.js')
 const package = require('../package.json')
+const tokenHandler = require('./tokenHandler.js')
 
 /**
  * Node-gpoauth
@@ -19,7 +19,7 @@ const package = require('../package.json')
  *  - middleaware.js : code for middleware calls added by node-gpaouth
  *  - routes.js : code for all Express routes/endpoints added by node-gpoauth
  *  - logger.js : Application and error logger
- *  - tokenCache.js : in memory store of access and refresh tokens
+ *  - tokenHandler.js : commun functions for interacting with and persisting tokens
  */
 module.exports = function(app, userConf) {
 
@@ -62,7 +62,7 @@ module.exports = function(app, userConf) {
 
   // Attempt to obtaion signature immediatly
   AUTH.fetchJWTSignature()
-    .then(sig => tokenCache.setSignature(sig))
+    .then(sig => tokenHandler.setSignature(sig))
     .catch(err => console.error(err))
 
     LOGGER.debug(` ======== node-gpoauth - ${package.version} ======== `)
