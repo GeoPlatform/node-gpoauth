@@ -2,7 +2,7 @@
 const request = require('request');
 const color = require('./consoleColors');
 const jwt = require('jsonwebtoken');
-const tokenHandler = require('./tokenHandler.js')
+
 
 /**
  * Send accessToken to broswer via the query string.
@@ -41,7 +41,7 @@ function getPrettyRespone(resp){
  * @param {Express.application} app - Express Appliction
  * @param  {Object} emitter - instanciated Events object
  */
-module.exports = function(CONFIG, app, emitter){
+module.exports = function(CONFIG, app, emitter, tokenHandler) {
   const LOGGER = require('./logger.js')(CONFIG.AUTH_DEBUG);
   const AUTH = require('./oauth.js')(CONFIG, emitter)
 

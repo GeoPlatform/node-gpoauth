@@ -1,8 +1,5 @@
 const jwt = require('jsonwebtoken');
 const color = require('./consoleColors.js')
-const tokenHandler = require('./tokenHandler.js')
-
-
 
 /**
  * node-gpoauth middleware
@@ -11,9 +8,9 @@ const tokenHandler = require('./tokenHandler.js')
  * @param {Express.application} app - Express Appliction
  * @param  {Object} emitter - instanciated Events object
  */
-module.exports = function(CONFIG, emitter){
-  const LOGGER = require('./logger.js')(CONFIG.AUTH_DEBUG);
+module.exports = function(CONFIG, emitter, tokenHandler){
   const AUTH = require('./oauth.js')(CONFIG, emitter)
+  const LOGGER = require('./logger.js')(CONFIG.AUTH_DEBUG);
 
   /**
    * Emits an UnauthorizedRequest event or an error if the event does not have
@@ -199,9 +196,9 @@ module.exports = function(CONFIG, emitter){
      */
     async function refreshAccessToken(req){
       const expiredAccessToken = tokenHandler.getAccessToken(req)
-      const oldRefreshToken = tokenHandler.getRefreshToken(req)
+      const oldRefreshToken = await tokenHandler.getRefreshToken(req)
 
-      LOGGER.debug(`-- Attempting AccessToken Refresh - Token: ${LOGGER.tokenDemo(expiredAccessToken)} --`)
+      LOGGER.debug(`-- Attempting Token Refresh - Access: ${LOGGER.tokenDemo(expiredAccessToken)} | Refresh : ${LOGGER.tokenDemo(oldRefreshToken)} --`)
       return AUTH.requestTokenFromRefreshToken(oldRefreshToken)
             .then(refResp => {
               LOGGER.debug("=== Refresh Succeeded ===")

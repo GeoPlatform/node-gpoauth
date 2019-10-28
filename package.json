@@ -1,6 +1,6 @@
 {
   "name": "@geoplatform/oauth-node",
-  "name": "node-gpoauth",
+  "version": "2.0.0",
   "description": "GPOAuth Node Module",
   "homepage": "idp.geoplatform.gov",
   "author": {
@@ -28,6 +28,7 @@
     "dev": "gulp dev"
   },
   "dependencies": {
+    "mongodb": "3.3.2",
     "jsonwebtoken": "^8.1.0",
     "request": "^2.83.0"
   },

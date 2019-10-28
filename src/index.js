@@ -1,7 +1,6 @@
 const configError = require('./logger.js')(false).formalConfigError;
 class MyEmitter extends require('events') {}
 const package = require('../package.json')
-const tokenHandler = require('./tokenHandler.js')
 
 /**
  * Node-gpoauth
@@ -28,21 +27,29 @@ module.exports = function(app, userConf) {
     IDP_AUTH_URL: '/auth/authorize',
     AUTH_TYPE: "grant",
     SCOPES: 'read',
+
+    // Optional
+    COOKIE_DOMAIN: '.geoplatform.gov',
     REFRESH_DEBOUNCE: 250,
     PRE_REFRESH_BUFFER: 250,
-    REFRESH_LINGER: 250
+    REFRESH_LINGER: 250,
+
+    // Token Cache
+    TOKEN_CACHE_PORT: 27017,
+    TOKEN_CACHE_AUTHDB: 'admin'
   }
 
   // Validate passed in config
   validateUserConfig(userConf); // will throw err on invalid config
   // Combine userConfig and constants for full config
   const CONFIG = Object.assign(defaults, userConf)
+  const tokenHandler = require('./tokenHandler.js')(CONFIG)
 
   const emitter = new MyEmitter();  // Event Emitter
   const LOGGER = require('./logger.js')(CONFIG.AUTH_DEBUG);
   const AUTH = require('./oauth.js')(CONFIG, emitter)
-  const routes = require('./routes')(CONFIG, app, emitter)
-  const middleware = require('./middleware.js')(CONFIG, emitter)
+  const routes = require('./routes')(CONFIG, app, emitter, tokenHandler)
+  const middleware = require('./middleware.js')(CONFIG, emitter, tokenHandler)
 
   // Setup Middleware ==========================================
   app.use(middleware.verifyJWT)
