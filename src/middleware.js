@@ -155,9 +155,6 @@ module.exports = function(CONFIG, emitter){
   }
 
 
-
-
-
   /**
    * Takes an expired AccessToken and exchanges it for a new one (via a
    * refreshToken). This funtion will debounce requests with the same AccessToken
