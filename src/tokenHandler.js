@@ -95,12 +95,21 @@ function setTokens(res, accessToken, refreshToken){
     const exp = new Date(Date.now() + 1000 * 1000)
     if (accessToken)
         res.cookie(ACCESS_TOKEN_COOKIE, base64Encode(accessToken), {
-            expires: exp
+            expires: exp,
+            secure: true,
+            SameSite:'Strict'
         })
 
     if (refreshToken)
         res.cookie(REFRESH_TOKEN_COOKIE, base64Encode(refreshToken), {
-            expires: exp,
+            /**
+             * If we remove the expires, it will become a session cookie and
+             * only live in memory for the browser... maybe a good way to
+             * limit session length
+             */
+            // expires: exp,
+            secure: true,
+            SameSite: 'Strict',
             httpOnly: true, // SECURITY: this is required
         })
 

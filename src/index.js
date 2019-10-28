@@ -57,7 +57,7 @@ module.exports = function(app, userConf) {
    *   endpoint subbject to the middleware call that will force a refresh)
    */
   app.get('/checktoken', (req, res, next) => {
-    res.send({ access_token: req.accessToken || null })
+    res.send({ valid: req.accessToken ? true : false })
   });
 
   // Attempt to obtaion signature immediatly

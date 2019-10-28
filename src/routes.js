@@ -141,8 +141,8 @@ module.exports = function(CONFIG, app, emitter){
 
 
   /**
-   * Endpoint that presents a loading entire applicaiton again when all
-   * that we really want is to set the localstorage and call events for
+   * Endpoint that presents loading theentire applicaiton again when all
+   * that we really want is to set the cookie and call events for
    * ng-common to handle.
    */
   app.get('/auth/loading', (req, res) => {

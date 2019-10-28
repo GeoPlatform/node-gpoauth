@@ -67,8 +67,8 @@ module.exports = function(CONFIG, emitter){
    * @param {function} next
    */
   function grantAccess(req, res, next){
-    const accessToken = tokenHandler.getAccessToken()
-    const JWT = tokenHandler.getJWT()
+    const accessToken = tokenHandler.getAccessToken(req)
+    const JWT = tokenHandler.getJWT(req)
 
     req.accessToken = accessToken
     req.jwt = JWT
@@ -190,23 +190,6 @@ module.exports = function(CONFIG, emitter){
     let refreshQueue = {}
 
     /**
-     * Run reqeusts back through the validation process with new token.
-     *
-     * @param {*} refreshQueueRecord
-     * @param {*} newAccessToken
-     */
-    function reProcessReqeustWithNewToken(refreshQueueRecord, newAccessToken, newRefreshToken){
-        // Pass back to verifyJWT for processing
-        refreshQueueRecord.queue.map(r => {
-          // Update request with new token to pass validation (post refresh)
-          tokenHandler.setTokens(r.res, newAccessToken, newRefreshToken)
-
-          // Pass back to verify
-          verifyJWT(r.req, r.res, r.next)
-        })
-    }
-
-    /**
      * The actual work of refreshing a token
      *
      * @param {*} refreshQueueRecord
@@ -266,9 +249,14 @@ module.exports = function(CONFIG, emitter){
       refreshQueueRecord.request = setTimeout(() => {
         refreshAccessToken(req)
           .then(tokens => {
+
             if (tokens.access_token){
-              tokenHandler.setTokens(res, tokens.access_token, tokens.refresh_token)
-              reProcessReqeustWithNewToken(refreshQueueRecord, tokens.access_token, tokens.refresh_token)
+              // Pass back to verifyJWT for processing
+              refreshQueueRecord.queue.map(r => {
+                // Update request with new token to pass validation (post refresh)
+                tokenHandler.setTokens(r.res, tokens.access_token, tokens.refresh_token)
+                grantAccess(r.req, r.res, r.next)
+              })
 
             } else {
               LOGGER.debug(`-- Refresh Failed : no tokens returned from IDP refresh (refresh token had likely expired) --`)
@@ -280,7 +268,8 @@ module.exports = function(CONFIG, emitter){
           .catch(err => {
             LOGGER.debug(`${color.FgRed}=== Error on refresh token: ===${color.Reset}`);
             LOGGER.debug(err.message)
-            tokenHandler.clearTokens(res)
+            console.log(err)
+            // tokenHandler.clearTokens(res)
             AUTH.sendRefreshErrorEvent(err, req, res, next);
           })
       }, CONFIG.REFRESH_DEBOUNCE);
