@@ -31,6 +31,19 @@ module.exports = function(CONFIG) {
         return Date.now() + (60 * 60 * 24) * 1000
     }
 
+    function getCookieOptions(){
+        const devMode = CONFIG.AUTH_DEV_MODE === true || CONFIG.AUTH_DEV_MODE === 'true'
+        return devMode ?
+            {
+                maxAge: getExpTime(),
+            } :
+            {
+                maxAge: getExpTime(),
+                secure: true,
+                domain: CONFIG.COOKIE_DOMAIN
+            }
+    }
+
 
 
 
@@ -100,23 +113,10 @@ module.exports = function(CONFIG) {
      * @param {string} refreshToken
      */
     async function setTokens(res, accessToken, refreshToken){
-        const devMode = CONFIG.AUTH_DEV_MODE === true || CONFIG.AUTH_DEV_MODE === 'true'
-        const cookieOpts = devMode ?
-                {
-                    maxAge: getExpTime(),
-                } :
-                {
-                    maxAge: getExpTime(),
-                    secure: true,
-                    domain: CONFIG.COOKIE_DOMAIN
-                }
-
         if (accessToken)
-            res.cookie(ACCESS_TOKEN_COOKIE, base64Encode(accessToken), cookieOpts)
-
+            res.cookie(ACCESS_TOKEN_COOKIE, base64Encode(accessToken), getCookieOptions())
         if (refreshToken)
             return  await CACHE.add(accessToken, refreshToken, getExpTime())
-
     }
 
     /**
@@ -125,7 +125,7 @@ module.exports = function(CONFIG) {
      * @param {Response} res
      */
     function clearTokens(res){
-        res.clearCookie(ACCESS_TOKEN_COOKIE)
+        res.clearCookie(ACCESS_TOKEN_COOKIE, getCookieOptions())
         // CACHE.remove(getAccessToken(req)) // May want to make asyn some day
     }
 
