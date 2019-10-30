@@ -1,6 +1,14 @@
 const mongo = require('mongodb').MongoClient
 const color = require('./consoleColors.js')
 
+
+function generateMongoConnectionString(CONFIG){
+  const CREDS = CONFIG.TOKEN_CACHE_USER ? `${CONFIG.TOKEN_CACHE_USER}:${CONFIG.TOKEN_CACHE_PASS}@` : ''
+  const AUTHPARAM = CREDS.length ? `&authSource=${CONFIG.TOKEN_CACHE_AUTHDB}` : ''
+
+  return `mongodb://${CREDS}${CONFIG.TOKEN_CACHE_HOST}:${CONFIG.TOKEN_CACHE_PORT}?ssl=ture${AUTHPARAM}`
+}
+
 /**
  * TokenCache
  *
@@ -27,21 +35,22 @@ module.exports = function(CONFIG) {
 
   // Attempt to connect to mongo store
   if(!!CONFIG.TOKEN_CACHE_HOST){
-    const CREDS = CONFIG.TOKEN_CACHE_USER ? `${CONFIG.TOKEN_CACHE_USER}:${CONFIG.TOKEN_CACHE_PASS}@` : ''
-    const AUTHPARAM = CREDS.length ? `?authSource=${CONFIG.TOKEN_CACHE_AUTHDB}` : ''
-    const CONN_STRING = `mongodb://${CREDS}${CONFIG.TOKEN_CACHE_HOST}:${CONFIG.TOKEN_CACHE_PORT}${AUTHPARAM}`
+    const CONN_STRING = generateMongoConnectionString(CONFIG)
+    // console.log(CONN_STRING)
 
     mongo.connect(CONN_STRING, {
-            useNewUrlParser: true,
-            useUnifiedTopology: true
+          useNewUrlParser: true,
+          useUnifiedTopology: true,
+          connectTimeoutMS: 10000,
         },
         (err, client) => {
             if (err) {
-              LOGGER.debug(`${color.FgRed}ERROR connecting to MongoDB. Falling back to in memory TokenCache implementation${color.Reset}`)
+              LOGGER.debug(`${color.FgRed}=== ERROR connecting to MongoDB. Falling back to in memory TokenCache implementation ===${color.Reset}`)
+              LOGGER.debug(`MongoDB connection String: ${color.FgCyan}${CONN_STRING}${color.Reset}`)
               console.log(err)
             } else {
               // Use the Mongo token cache
-              const db = client.db('nodeGpoauth')
+              const db = client.db(CONFIG.TOKEN_CACHE_DB)
               cache = db.collection('TokenCache')
               LOGGER.debug(`${color.FgYellow}== Connected to Mongo DB for TokenCache ==${color.Reset}`)
             }

@@ -51,8 +51,8 @@ module.exports = function(CONFIG) {
      *
      * @returns {String} the oauth signature
      */
-    function getSignature(){
-        return oauth_signature;
+    function hasSignature(){
+        return !!oauth_signature.length;
     }
 
     function validateAccessToken(accessToken){
@@ -125,7 +125,7 @@ module.exports = function(CONFIG) {
 
     return {
         setSignature,
-        getSignature,
+        hasSignature,
         validateAccessToken,
         getJWT,
 

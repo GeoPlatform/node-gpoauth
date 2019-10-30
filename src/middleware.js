@@ -102,7 +102,7 @@ module.exports = function(CONFIG, emitter, tokenHandler){
 
     const accessToken = tokenHandler.getAccessToken(req);
 
-    if(!tokenHandler.getSignature()){
+    if(!tokenHandler.hasSignature()){
       // Git the signature then try again
       AUTH.fetchJWTSignature()
         .then(sig => {
