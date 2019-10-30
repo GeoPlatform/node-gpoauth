@@ -100,13 +100,19 @@ module.exports = function(CONFIG) {
      * @param {string} refreshToken
      */
     async function setTokens(res, accessToken, refreshToken){
+        const devMode = CONFIG.AUTH_DEV_MODE === true || CONFIG.AUTH_DEV_MODE === 'true'
+        const cookieOpts = devMode ?
+                {
+                    maxAge: getExpTime(),
+                } :
+                {
+                    maxAge: getExpTime(),
+                    secure: true,
+                    domain: CONFIG.COOKIE_DOMAIN
+                }
+
         if (accessToken)
-            res.cookie(ACCESS_TOKEN_COOKIE, base64Encode(accessToken), {
-                maxAge: getExpTime(),
-                // secure: true,
-                // SameSite:'Strict',
-                // domain: CONFIG.COOKIE_DOMAIN
-            })
+            res.cookie(ACCESS_TOKEN_COOKIE, base64Encode(accessToken), cookieOpts)
 
         if (refreshToken)
             return  await CACHE.add(accessToken, refreshToken, getExpTime())

@@ -102,6 +102,7 @@ The following are the fields that can be on the configurartion object sent to no
 |PRE_REFRESH_BUFFER| int | Milliseconds before token expires to initiate a pre-expiration refresh request. This is helpful when requests will be passed to another service to prevent token expiration during that request. | 250 |
 |REFRESH_LINGER| int | Milliseconds to delay purging refresh token. This is used for slow network traffic or high concurrent request volume. | 250 |
 |AUTH_DEBUG| boolean | If true print out debug information from node-gpoauth | false |
+|AUTH_DEV_MODE | boolean | Run in development mode. Development mode will change the way that tokens are passed (in cookies). Dev mode is less secure and should not be used in production systems. | false |
 
 ### Common Token Cache
 The default behavior of the system is to store all refresh tokens locally in memory. This means that only the appliction that originally requested the access and refreh token is able to refresh the access token. If you provide mongoDB setting, the code will use a common TokenCache in mongoDB. This will allow other applictions to use the same tokens and allow a user to stay logged in across multiple applications.

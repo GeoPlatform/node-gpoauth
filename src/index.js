@@ -33,6 +33,8 @@ module.exports = function(app, userConf) {
     REFRESH_DEBOUNCE: 250,
     PRE_REFRESH_BUFFER: 250,
     REFRESH_LINGER: 250,
+    AUTH_DEBUG: false,
+    AUTH_DEV_MODE: false,
 
     // Token Cache
     TOKEN_CACHE_PORT: 27017,
@@ -43,8 +45,8 @@ module.exports = function(app, userConf) {
   validateUserConfig(userConf); // will throw err on invalid config
   // Combine userConfig and constants for full config
   const CONFIG = Object.assign(defaults, userConf)
-  const tokenHandler = require('./tokenHandler.js')(CONFIG)
 
+  const tokenHandler = require('./tokenHandler.js')(CONFIG)
   const emitter = new MyEmitter();  // Event Emitter
   const LOGGER = require('./logger.js')(CONFIG.AUTH_DEBUG);
   const AUTH = require('./oauth.js')(CONFIG, emitter)
