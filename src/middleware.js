@@ -198,20 +198,25 @@ module.exports = function(CONFIG, emitter, tokenHandler){
       const expiredAccessToken = tokenHandler.getAccessToken(req)
       const oldRefreshToken = await tokenHandler.getRefreshToken(req)
 
-      LOGGER.debug(`-- Attempting Token Refresh - Access: ${LOGGER.tokenDemo(expiredAccessToken)} | Refresh : ${LOGGER.tokenDemo(oldRefreshToken)} --`)
-      return AUTH.requestTokenFromRefreshToken(oldRefreshToken)
-            .then(refResp => {
-              LOGGER.debug("=== Refresh Succeeded ===")
-              LOGGER.debug("======= New Token =======")
-              LOGGER.debug('|| Access:  ' + LOGGER.tokenDemo(refResp.access_token))
-              LOGGER.debug('|| Refresh: ' + LOGGER.tokenDemo(refResp.refresh_token))
-              LOGGER.debug("=========================")
+      if(oldRefreshToken){
+        LOGGER.debug(`-- Attempting Token Refresh - Access: ${LOGGER.tokenDemo(expiredAccessToken)} | Refresh : ${LOGGER.tokenDemo(oldRefreshToken)} --`)
+        return AUTH.requestTokenFromRefreshToken(oldRefreshToken)
+              .then(refResp => {
+                LOGGER.debug("=== Refresh Succeeded ===")
+                LOGGER.debug("======= New Token =======")
+                LOGGER.debug('|| Access:  ' + LOGGER.tokenDemo(refResp.access_token))
+                LOGGER.debug('|| Refresh: ' + LOGGER.tokenDemo(refResp.refresh_token))
+                LOGGER.debug("=========================")
 
-              return {
-                access_token: refResp.access_token,
-                refresh_token: refResp.refresh_token
-              }
-            })
+                return {
+                  access_token: refResp.access_token,
+                  refresh_token: refResp.refresh_token
+                }
+              })
+
+      } else {
+        return {}
+      }
     }
 
     /**

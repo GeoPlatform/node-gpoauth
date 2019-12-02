@@ -102,7 +102,7 @@ module.exports = function(CONFIG) {
     switch (isMongoCache()) {
       case true:
         return cache.findOne({ 'accessToken': accessToken })
-                    .then(r => r.refreshToken)
+                    .then(r => r && r.refreshToken)
       case false:
         return Promise.resolve(cache[accessToken] && cache[accessToken].refreshToken);
     }
