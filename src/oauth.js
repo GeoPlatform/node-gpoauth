@@ -158,7 +158,7 @@ module.exports = function(CONFIG, emitter){
       request({
         uri: CONFIG.IDP_BASE_URL + '/api/profile',
         method: 'GET',
-        headers: { 'Authorization': 'Bearer ' + accessToken }
+        headers: { 'Authorization': `Bearer ${accessToken}` }
       }, function(error, response) {
         error ?
           reject(error) :
@@ -180,10 +180,6 @@ module.exports = function(CONFIG, emitter){
    * @return undefined
    */
   function sendRefreshErrorEvent(err, req, res, next){
-    // Send empty Bearer token to client to clear the expired JWT
-    res.header('Authorization', REVOKE_RESPONSE);
-    LOGGER.debug("Removing browser token (empty Authorization header sent)")
-
     // Inform the application
     if(emitter.listenerCount('errorRefreshingAccessToken') > 0){
       const eventError = {

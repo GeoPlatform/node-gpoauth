@@ -1,17 +1,8 @@
 
 const request = require('request');
 const color = require('./consoleColors');
-const tokenCache = require('./tokenCache');
 const jwt = require('jsonwebtoken');
 
-/**
- * Get the accessToken from request.
- *
- * @param {Request} req
- */
-function getToken(req){
-  return (req.headers.authorization || '').replace('Bearer ','');
-}
 
 /**
  * Send accessToken to broswer via the query string.
@@ -50,7 +41,7 @@ function getPrettyRespone(resp){
  * @param {Express.application} app - Express Appliction
  * @param  {Object} emitter - instanciated Events object
  */
-module.exports = function(CONFIG, app, emitter){
+module.exports = function(CONFIG, app, emitter, tokenHandler) {
   const LOGGER = require('./logger.js')(CONFIG.AUTH_DEBUG);
   const AUTH = require('./oauth.js')(CONFIG, emitter)
 
@@ -70,24 +61,16 @@ module.exports = function(CONFIG, app, emitter){
    * Logs a user in through IDP
    */
   app.get('/login', (req, res, next) => {
-    let redirectURL;
-    if(req.query.sso){
-      redirectURL = `?sso=true`
-      LOGGER.debug(`Single Sign On (SSO) login requested`)
-    } else {
-      // TODO: Should refactor to remove the odd double URI encoding of redirect_url
-      redirectURL = req.query.redirect_url ?
-                      encodeURIComponent(req.query.redirect_url) :
-                      '';
-    }
+    const redirectURL = req.query.redirect_url ?
+                    encodeURIComponent(req.query.redirect_url) :
+                    '';
 
     const authURL = CONFIG.IDP_BASE_URL +
                     CONFIG.IDP_AUTH_URL +
                     `?response_type=code` +
                     `&redirect_uri=` + encodeURIComponent(`${CONFIG.APP_BASE_URL}/authtoken/${redirectURL}`) +
                     `&scope=read` +
-                    `&client_id=${CONFIG.APP_ID}` +
-                    (req.query.sso ? '&sso=true' : '');
+                    `&client_id=${CONFIG.APP_ID}`;
 
     LOGGER.debug(`Login request received: redirecting to ${color.FgBlue}${authURL}${color.Reset}`)
     if(req.query.redirect_url) LOGGER.debug(`Redirect URL set to: ${color.FgBlue}${req.query.redirect_url}${color.Reset}`)
@@ -100,48 +83,10 @@ module.exports = function(CONFIG, app, emitter){
   app.get('/authtoken/:redirectURL?', (req, res) => {
     LOGGER.debug(`token exchange endpoint called (/authtoken)`)
 
-    // Catch SSO test and redirect to page close script
-    if(req.query && req.query.sso && JSON.parse(req.query.sso) && !req.query.code){
-      // Send them an HTML file that communicates with ng-common to close SSO iframe
-      LOGGER.debug(`${color.FgRed}SSO login attempt failed${color.Reset}`)
-      res.send(
-        `<!DOCTYPE html>
-        <html lang="en">
-        <head>
-          <meta charset="UTF-8">
-          <title>Close Iframe!</title>
-        </head>
-        <body>
-          <p>This is a code generated page</p>
-          <p>Please go back to <a href="${CONFIG.APP_BASE_URL}">${CONFIG.APP_BASE_URL}</a> to log in </p>
-          <script>
-            window.parent.postMessage("iframe:ssoFailed", "${CONFIG.APP_BASE_URL}");
-          </script>
-        </body>
-        </html>`
-      )
-      return
-    }
-
     /******** Exchange and redirect *******/
-    let URL;
-
-    // Fails SSO attempts will not return a grant code
-    if(!req.query.code){
-      LOGGER.debug(`${color.FgRed}No grant code recieved: redirecting user back${color.Reset}`)
-      res.redirect(URL)
-      return // end execution
-    }
-
-    if(req.query.sso){
-      // Always use the auth/loading endpoint to prevent loading the applicaiton
-      // again in the SSO iframe.
-      URL = '/auth/loading'
-    } else {
-      URL = req.params.redirectURL ?
-              decodeURIComponent(req.params.redirectURL) :
-              '/';
-    }
+    const URL = req.params.redirectURL ?
+            decodeURIComponent(req.params.redirectURL) :
+            '/';
     LOGGER.debug(`URL to redirect user back to: ${color.FgBlue}${URL}${color.Reset}`)
     LOGGER.debug(`Grant code received from gpoauth: `, LOGGER.tokenDemo(req.query.code))
     LOGGER.debug(`Exchanging grant code for tokens: POST - ${CONFIG.IDP_BASE_URL + CONFIG.IDP_TOKEN_URL} | code: ${req.query.code}`)
@@ -150,11 +95,9 @@ module.exports = function(CONFIG, app, emitter){
       .then(tokenResp => {
         const accessToken = tokenResp.access_token;
         const refreshToken = tokenResp.refresh_token;
+        tokenHandler.setTokens(res, accessToken, refreshToken)
           LOGGER.debug(`Response from exchange: `, getPrettyRespone(tokenResp))
           LOGGER.debug(`Tokens recieved: Access - ${LOGGER.tokenDemo(accessToken)} | Refresh - ${LOGGER.tokenDemo(refreshToken)}`)
-
-        // cache the refreshToken
-        tokenCache.add(accessToken, refreshToken)
           LOGGER.debug("User Authenticated - JWT:", jwt.decode(accessToken))
 
         // Call again to get user data and notifiy application that user has authenticated
@@ -189,7 +132,8 @@ module.exports = function(CONFIG, app, emitter){
           }
         })
         .catch(err => {
-          console.error(LOGGER.formalError("Error exchanging grant for access token (JWT)\nUser was not authenticated."))
+          // console.log(err)
+          console.error(LOGGER.formalError("Error exchanging grant for access token (JWT)\nUser was not authenticated.", err))
           // Don't crash user applicaiton for this. Pass them thorugh without a token
           res.redirect(URL);
         })
@@ -197,8 +141,8 @@ module.exports = function(CONFIG, app, emitter){
 
 
   /**
-   * Endpoint that presents a loading entire applicaiton again when all
-   * that we really want is to set the localstorage and call events for
+   * Endpoint that presents loading theentire applicaiton again when all
+   * that we really want is to set the cookie and call events for
    * ng-common to handle.
    */
   app.get('/auth/loading', (req, res) => {
@@ -215,8 +159,8 @@ module.exports = function(CONFIG, app, emitter){
    * Call to revoke (logout) on the gpoauth server
    */
   app.get('/revoke', (req, res, next) => {
-    const accessToken = getToken(req);
-      LOGGER.debug(`Request Revoke Token - Token : ${LOGGER.tokenDemo(accessToken)}`)
+    const accessToken = tokenHandler.getAccessToken(req);
+    LOGGER.debug(`Request Revoke Token - Token : ${LOGGER.tokenDemo(accessToken)}`)
 
     // Make the call to revoke the token
     request({
@@ -226,14 +170,11 @@ module.exports = function(CONFIG, app, emitter){
     }, function(error, response) {
       if (error) res.status(500).send(error)
 
-      tokenCache.remove(accessToken)
+      tokenHandler.clearTokens(res)
       emitter.emit('accessTokenRevoked', jwt.decode(accessToken), accessToken);
         LOGGER.debug(`Token successfully revoked - Token : ${LOGGER.tokenDemo(accessToken)}`)
 
-      // If sso set then redirect to the logout endpoint to destroy gpoauth cookie
-      req.query.sso ?
-        res.redirect(`${CONFIG.IDP_BASE_URL}/logout`) :
-        res.send({ status: 'ok' }) ;
+      res.send({ status: 'ok' }) ;
     });
   });
 }

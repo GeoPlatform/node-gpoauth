@@ -1,3 +1,14 @@
+const mongo = require('mongodb').MongoClient
+const color = require('./consoleColors.js')
+
+
+function generateMongoConnectionString(CONFIG){
+  const CREDS = CONFIG.TOKEN_CACHE_USER ? `${CONFIG.TOKEN_CACHE_USER}:${CONFIG.TOKEN_CACHE_PASS}@` : ''
+  const AUTHPARAM = CREDS.length ? `&authSource=${CONFIG.TOKEN_CACHE_AUTHDB}` : ''
+
+  return `mongodb://${CREDS}${CONFIG.TOKEN_CACHE_HOST}:${CONFIG.TOKEN_CACHE_PORT}?ssl=ture${AUTHPARAM}`
+}
+
 /**
  * TokenCache
  *
@@ -6,109 +17,141 @@
  * keep record of a users current refresh token for refreshing their
  * access token (JWT) that has a much shorter lifespan.
  */
-let oauth_signature;
+module.exports = function(CONFIG) {
+  const LOGGER = require('./logger.js')(CONFIG.AUTH_DEBUG);
 
-/**
- * Associative Array of:
- * {
- *    String<AccessToken>: {
- *      refreshToken: String<RefreshToken>
- *      newAccessToken: String<AccessToken>
- *    }
- * }
- *
- * We use Access Tokens as keys because we are able to validate them with the
- * ignature and therefore garentee that only valid keys are maintained in the
- * cache.
- */
-let cache = {};
 
-/**
- * Add an token to the cache
- */
-function add(accessToken, refreshToken) {
-  const entry = {
-    refreshToken: refreshToken,
-    newAccessToken: null
+  /**
+   * Associative Array of:
+   * {
+   *    String<AccessToken>: String<RefreshToken>
+   * }
+   *
+   * We use Access Tokens as keys because we are able to validate them with the
+   * ignature and therefore garentee that only valid keys are maintained in the
+   * cache.
+   */
+  let cache = {};
+
+  // Attempt to connect to mongo store
+  if(!!CONFIG.TOKEN_CACHE_HOST){
+    const CONN_STRING = generateMongoConnectionString(CONFIG)
+    // console.log(CONN_STRING)
+
+    mongo.connect(CONN_STRING, {
+          useNewUrlParser: true,
+          useUnifiedTopology: true,
+          connectTimeoutMS: 10000,
+        },
+        (err, client) => {
+            if (err) {
+              LOGGER.debug(`${color.FgRed}=== ERROR connecting to MongoDB. Falling back to in memory TokenCache implementation ===${color.Reset}`)
+              LOGGER.debug(`MongoDB connection String: ${color.FgCyan}${CONN_STRING}${color.Reset}`)
+              console.log(err)
+            } else {
+              // Use the Mongo token cache
+              const db = client.db(CONFIG.TOKEN_CACHE_DB)
+              cache = db.collection('TokenCache')
+              LOGGER.debug(`${color.FgYellow}== Connected to Mongo DB for TokenCache ==${color.Reset}`)
+            }
+        }
+    )
+  } else {
+    LOGGER.debug("== Using local in memory TokenCache implementation ==")
   }
-  cache[accessToken] = entry;
-  return entry;
+
+  /**
+   * For typeguard, are use using Mongo or local.
+   */
+  function isMongoCache(){
+    return cache && typeof cache.updateOne == 'function'
+  }
+
+
+
+
+  /**
+   * Add an token to the cache
+   */
+  async function add(accessToken, refreshToken, expiration) {
+    switch (isMongoCache()) {
+      case true:
+        const query = { 'accessToken': accessToken }
+        const update = {
+          '$set': {
+            'accessToken': accessToken,
+            'refreshToken': refreshToken,
+            'ttl': expiration
+          }
+        }
+        return cache.updateOne(query, update, { upsert: true })
+
+      case false:
+        cache[accessToken] = {
+          'refreshToken': refreshToken,
+          'ttl': expiration
+        };
+        return Promise.resolve(cache[accessToken]);
+    }
+  }
+
+  /**
+   * Get a refresh token for given accessToken
+   */
+  async function getRefreshToken(accessToken){
+    switch (isMongoCache()) {
+      case true:
+        return cache.findOne({ 'accessToken': accessToken })
+                    .then(r => r && r.refreshToken)
+      case false:
+        return Promise.resolve(cache[accessToken] && cache[accessToken].refreshToken);
+    }
+  }
+
+  /**
+   * Invalidate/remove accessToken and its refreshToken from the cache
+   */
+  async function remove(accessToken) {
+    switch (isMongoCache()) {
+      case true:
+        return cache.deleteOne({ 'accessToken': accessToken })
+
+      case false:
+        return delete cache[accessToken]
+    }
+  }
+
+  /**
+   * Clean Cache
+   */
+  async function cleanCache(){
+    const now = new Date().getTime()
+    switch (isMongoCache()) {
+      case true:
+        return cache.deleteMany({ 'ttl': { $lt: now } })
+
+      case false:
+        cache = Object.entries(cache)
+                      .filter(([at, data]) => data.ttl < now)
+                      .reduce((acc, [at, data]) => {
+                        acc[at] = data
+                        return acc
+                      }, {})
+    }
+  }
+
+
+  // Setup automatic cleaner: remove old tokens
+  const aDay = 60 * 60 * 24 * 1000
+  setInterval(cleanCache, aDay)
+
+  // ==========================================================================
+
+  // exposing (...)
+  return {
+    add,
+    getRefreshToken,
+    remove
+  }
+
 }
-
-/**
- * Get a refresh token for given accessToken
- */
-function getRefreshToken(accessToken){
-  return cache[accessToken] && cache[accessToken].refreshToken
-}
-
-function setNewAccessToken(accessToken, newAccessToken) {
-  const data = cache[accessToken]
-  if (data)
-    data.newAccessToken = newAccessToken;
-  return data
-}
-
-function hasBeenRefreshed(accessToken){
-  return !!getNewAccessToken(accessToken);
-}
-
-function getNewAccessToken(accessToken){
-  return cache[accessToken].newAccessToken
-}
-
-function getLatestToken(accessToken){
-  return getNewAccessToken(accessToken) || accessToken;
-}
-
-/**
- * Fetch and delete record from cache
- */
-function pop(accessToken){
-  const val = cache[accessToken];
-  remove(accessToken)
-  return val;
-}
-
-/**
- * Invalidate/remove accessToken and its refreshToken from the cache
- */
-function remove(accessToken) {
-  delete cache[accessToken]
-}
-
-/**
- * Set the oauth_signature
- *
- * @param {String} signature
- */
-function setSignature(signature) {
-  oauth_signature = signature;
-}
-
-/**
- * Get the oauth_signature.
- *
- * @returns {String} the oauth signature
- */
-function getSignature(){
-  return oauth_signature;
-}
-
-// ==========================================================================
-
-// exposing (...)
-module.exports = {
-  add,
-  getRefreshToken,
-  setNewAccessToken,
-  hasBeenRefreshed,
-  getNewAccessToken,
-  getLatestToken,
-  pop,
-  remove,
-  // =======================
-  setSignature,
-  getSignature
-}
-

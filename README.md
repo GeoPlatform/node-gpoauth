@@ -34,14 +34,14 @@ Import node-gpoauth directly from github using the following in package.json:
 
 ### Development and local integration
 To develop with `node-gpoauth` locally you will need to install it from you local file system. First start by checking out the codebase and then use NPM in insalll it locally:
-> $ # Clone node-gpoauth  
-> $ git clone git@github.com:GeoPlatform/node-gpoauth.git  
->  
-> $ # cd to your appliction (local development)  
-> $ cd myApp  
->   
-> $ # install using npm (path relative to your application directory)  
-> $ npm install file:../node-gpoauth  
+> $ # Clone node-gpoauth
+> $ git clone git@github.com:GeoPlatform/node-gpoauth.git
+>
+> $ # cd to your appliction (local development)
+> $ cd myApp
+>
+> $ # install using npm (path relative to your application directory)
+> $ npm install file:../node-gpoauth
 
 <br>
 <br>
@@ -97,10 +97,24 @@ The following are the fields that can be on the configurartion object sent to no
 
 | Field | Type | Description| Default |
 |---|---|---|---|
-|REFRESH_DEBOUNCE| int | Milliseconds to delay the request for a refresh token. This will allow requests to queue and all return at once when the token has been succesfully refreshed. | 250 |
-|PRE_REFRESH_BUFFER| int | Milliseconds before token expires to initiate a pre-expiration refresh request. This is helpful when requests will be passed to another service to prevnet token expiration during that request. | 250 |
+|COOKIE_DOMAIN| string | The domain to set for cookie containing the token header. This will determin what domains have access to the token via cookie. | ".geoplatform.gov" |
+|REFRESH_DEBOUNCE| int | Milliseconds to delay the request to obtain a new access token. This will allow requests to queue and all return at once when the token has been succesfully refreshed. | 250 |
+|PRE_REFRESH_BUFFER| int | Milliseconds before token expires to initiate a pre-expiration refresh request. This is helpful when requests will be passed to another service to prevent token expiration during that request. | 250 |
 |REFRESH_LINGER| int | Milliseconds to delay purging refresh token. This is used for slow network traffic or high concurrent request volume. | 250 |
 |AUTH_DEBUG| boolean | If true print out debug information from node-gpoauth | false |
+|AUTH_DEV_MODE | boolean | Run in development mode. Development mode will change the way that tokens are passed (in cookies). Dev mode is less secure and should not be used in production systems. | false |
+
+### Common Token Cache
+The default behavior of the system is to store all refresh tokens locally in memory. This means that only the appliction that originally requested the access and refreh token is able to refresh the access token. If you provide mongoDB setting, the code will use a common TokenCache in mongoDB. This will allow other applictions to use the same tokens and allow a user to stay logged in across multiple applications.
+
+| Field | Type | Description| Default | Example |
+|---|---|---|---|---|
+|TOKEN_CACHE_HOST | string | The host IP address where the MongoDB is locatied | - | "10.11.12.1" |
+|TOKEN_CACHE_USER | string | The username for the Mongo Database. | - | 'MyUser' |
+|TOKEN_CACHE_PASS | string | The password for the Mongo user. | - | 'MyPassword' |
+|TOKEN_CACHE_PORT | int | The port for MongoDB. | 27017 | 12345 |
+|TOKEN_CACHE_AUTHDB | string | The authentication database name for MongoDB (where user data is stored). | 'admin' | 'myAuthDatase' |
+
 
 <br><br>
 
@@ -309,6 +323,6 @@ Avaliable events are:
 >IDP.on('accessTokenRevoked', (jwt, revokedToken) => {
 >  // handle event here
 >})
->``` 
+>```
 
 

@@ -1,7 +1,6 @@
 const configError = require('./logger.js')(false).formalConfigError;
 class MyEmitter extends require('events') {}
-const tokenCache = require('./tokenCache.js')
-const package = require('../package.json')
+const pkg = require('../package.json')
 
 /**
  * Node-gpoauth
@@ -19,7 +18,7 @@ const package = require('../package.json')
  *  - middleaware.js : code for middleware calls added by node-gpaouth
  *  - routes.js : code for all Express routes/endpoints added by node-gpoauth
  *  - logger.js : Application and error logger
- *  - tokenCache.js : in memory store of access and refresh tokens
+ *  - tokenHandler.js : commun functions for interacting with and persisting tokens
  */
 module.exports = function(app, userConf) {
 
@@ -28,9 +27,18 @@ module.exports = function(app, userConf) {
     IDP_AUTH_URL: '/auth/authorize',
     AUTH_TYPE: "grant",
     SCOPES: 'read',
+
+    // Optional
+    COOKIE_DOMAIN: '.geoplatform.gov',
     REFRESH_DEBOUNCE: 250,
     PRE_REFRESH_BUFFER: 250,
-    REFRESH_LINGER: 250
+    REFRESH_LINGER: 250,
+    AUTH_DEBUG: false,
+    AUTH_DEV_MODE: false,
+
+    // Token Cache
+    TOKEN_CACHE_PORT: 27017,
+    TOKEN_CACHE_AUTHDB: 'admin'
   }
 
   // Validate passed in config
@@ -38,11 +46,12 @@ module.exports = function(app, userConf) {
   // Combine userConfig and constants for full config
   const CONFIG = Object.assign(defaults, userConf)
 
+  const tokenHandler = require('./tokenHandler.js')(CONFIG)
   const emitter = new MyEmitter();  // Event Emitter
   const LOGGER = require('./logger.js')(CONFIG.AUTH_DEBUG);
   const AUTH = require('./oauth.js')(CONFIG, emitter)
-  const routes = require('./routes')(CONFIG, app, emitter)
-  const middleware = require('./middleware.js')(CONFIG, emitter)
+  const routes = require('./routes')(CONFIG, app, emitter, tokenHandler)
+  const middleware = require('./middleware.js')(CONFIG, emitter, tokenHandler)
 
   // Setup Middleware ==========================================
   app.use(middleware.verifyJWT)
@@ -57,15 +66,15 @@ module.exports = function(app, userConf) {
    *   endpoint subbject to the middleware call that will force a refresh)
    */
   app.get('/checktoken', (req, res, next) => {
-    res.send({ access_token: req.accessToken || null })
+    res.send({ valid: req.accessToken ? true : false })
   });
 
   // Attempt to obtaion signature immediatly
   AUTH.fetchJWTSignature()
-    .then(sig => tokenCache.setSignature(sig))
+    .then(sig => tokenHandler.setSignature(sig))
     .catch(err => console.error(err))
 
-    LOGGER.debug(` ======== node-gpoauth - ${package.version} ======== `)
+    LOGGER.debug(` ======== node-gpoauth - ${pkg.version} ======== `)
     LOGGER.debug('  Debugger Enabled ')
     LOGGER.debug('Config: ')
     LOGGER.debug(CONFIG)
