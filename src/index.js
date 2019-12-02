@@ -1,6 +1,6 @@
 const configError = require('./logger.js')(false).formalConfigError;
 class MyEmitter extends require('events') {}
-const package = require('../package.json')
+const pkg = require('../package.json')
 
 /**
  * Node-gpoauth
@@ -74,7 +74,7 @@ module.exports = function(app, userConf) {
     .then(sig => tokenHandler.setSignature(sig))
     .catch(err => console.error(err))
 
-    LOGGER.debug(` ======== node-gpoauth - ${package.version} ======== `)
+    LOGGER.debug(` ======== node-gpoauth - ${pkg.version} ======== `)
     LOGGER.debug('  Debugger Enabled ')
     LOGGER.debug('Config: ')
     LOGGER.debug(CONFIG)
