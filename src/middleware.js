@@ -79,6 +79,19 @@ module.exports = function(CONFIG, emitter, tokenHandler){
     }
   }
 
+  /**
+   * If the JWT past the maximum allowable time
+   * MAX = JWT.exp + REFRESH_LINGER
+   *
+   * @param {*} accessToken
+   */
+  function isPastMaxAllowableTime(accessToken){
+    const EXP = JWT.decode(accessToken).exp * 1000 // seconds to milliseconds
+    const MAX_ALLOWED = (new Date(EXP + CONFIG.REFRESH_LINGER)).getTime()
+    const NOW = (new Date()).getTime()
+    return NOW > MAX_ALLOWED
+  }
+
 
   /**************** Middleware ****************/
 
@@ -132,17 +145,14 @@ module.exports = function(CONFIG, emitter, tokenHandler){
 
       } catch(err) {
         if (err instanceof TokenExpiredError) {
-          // DT-2048: allow refreshToken to linger for delayed (CONFIG.REFRESH_LINGER))
-          const NOW = (new Date()).getTime() / 1000
-          const MAX_ALLOWED = (new Date(accessToken.exp + CONFIG.REFRESH_LINGER)).getTime() / 1000
-          if(NOW >= MAX_ALLOWED){
-            // Allow them through because time left on linger
-            grantAccess(req, res, next)
-
-          } else {
-            // Past MAX_ALLOWS : token is actually expired
+          if(isPastMaxAllowableTime(accessToken)){
+            // Past MAX_ALLOWED : token is actually expired
             LOGGER.logRequest(`Expired token used: ${err}`, accessToken, req)
             refreshDebounce(accessToken, req, res, next);
+
+          } else {
+            // Allow them through because time left on linger
+            grantAccess(req, res, next)
           }
 
         } else {
@@ -205,15 +215,19 @@ module.exports = function(CONFIG, emitter, tokenHandler){
         LOGGER.debug(`-- Attempting Token Refresh - Access: ${LOGGER.tokenDemo(expiredAccessToken)} | Refresh : ${LOGGER.tokenDemo(oldRefreshToken)} --`)
         return AUTH.requestTokenFromRefreshToken(oldRefreshToken)
               .then(refResp => {
-                LOGGER.debug("=== Refresh Succeeded ===")
-                LOGGER.debug("======= New Token =======")
-                LOGGER.debug('|| Access:  ' + LOGGER.tokenDemo(refResp.access_token))
-                LOGGER.debug('|| Refresh: ' + LOGGER.tokenDemo(refResp.refresh_token))
-                LOGGER.debug("=========================")
+                if(refResp.access_token && refResp.refresh_token){
+                  LOGGER.debug("=== Refresh Succeeded ===")
+                  LOGGER.debug("======= New Token =======")
+                  LOGGER.debug('|| Access:  ' + LOGGER.tokenDemo(refResp.access_token))
+                  LOGGER.debug('|| Refresh: ' + LOGGER.tokenDemo(refResp.refresh_token))
+                  LOGGER.debug("=========================")
 
-                return {
-                  access_token: refResp.access_token,
-                  refresh_token: refResp.refresh_token
+                  return {
+                    access_token: refResp.access_token,
+                    refresh_token: refResp.refresh_token
+                  }
+                } else {
+                  return {}
                 }
               })
 
