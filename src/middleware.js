@@ -1,4 +1,5 @@
-const jwt = require('jsonwebtoken');
+const JWT = require('jsonwebtoken');
+const TokenExpiredError = JWT.TokenExpiredError
 const color = require('./consoleColors.js')
 
 /**
@@ -65,10 +66,10 @@ module.exports = function(CONFIG, emitter, tokenHandler){
    */
   function grantAccess(req, res, next){
     const accessToken = tokenHandler.getAccessToken(req)
-    const JWT = tokenHandler.getJWT(req)
+    const jwt = tokenHandler.getJWT(req)
 
     req.accessToken = accessToken
-    req.jwt = JWT
+    req.jwt = jwt
     LOGGER.logRequest('Access Granted', accessToken, req)
 
     if(emitter.listenerCount('accessGranted') > 0){
@@ -110,7 +111,7 @@ module.exports = function(CONFIG, emitter, tokenHandler){
           verifyJWT(req, res, next)/* try again */
         })
         .catch(err => {
-          LOGGER.logRequest('Unauthorized Request', accessToken, req)
+          LOGGER.logRequest('Unauthorized Request: NoSignature', accessToken, req)
           fireUnauthorizedRequest(err, req, res, next)
         })
 
@@ -121,14 +122,16 @@ module.exports = function(CONFIG, emitter, tokenHandler){
 
         // Force refresh if withing REFRESH_DEBOUNCE buffer
         const now = (new Date()).getTime();
-        if(needsRefreshed(now, jwt.exp * 1000, CONFIG.PRE_REFRESH_BUFFER))
-          throw new jwt.TokenExpiredError('Token is past PRE_REFRESH_BUFFER limit', now - CONFIG.PRE_REFRESH_BUFFER);
+        if(needsRefreshed(now, jwt.exp * 1000, CONFIG.PRE_REFRESH_BUFFER)){
+          throw new TokenExpiredError('Token is past PRE_REFRESH_BUFFER limit', now - CONFIG.PRE_REFRESH_BUFFER);
 
-        // Pass them through
-        grantAccess(req, res, next)
+        } else {
+          // Pass them through
+          grantAccess(req, res, next)
+        }
 
       } catch(err) {
-        if (err instanceof jwt.TokenExpiredError) {
+        if (err instanceof TokenExpiredError) {
           // DT-2048: allow refreshToken to linger for delayed (CONFIG.REFRESH_LINGER))
           const NOW = (new Date()).getTime() / 1000
           const MAX_ALLOWED = (new Date(accessToken.exp + CONFIG.REFRESH_LINGER)).getTime() / 1000
@@ -144,7 +147,7 @@ module.exports = function(CONFIG, emitter, tokenHandler){
 
         } else {
           // Call the listener 'unauthorizedRequest' handler if registered
-          LOGGER.logRequest('Unauthorized Request', accessToken, req)
+          LOGGER.logRequest(`Unauthorized Request: ${err.name}`, accessToken, req)
           fireUnauthorizedRequest(err, req, res, next)
         }
       }

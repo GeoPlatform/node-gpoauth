@@ -29,7 +29,7 @@
   },
   "dependencies": {
     "mongodb": "3.3.2",
-    "jsonwebtoken": "^8.1.0",
+    "jsonwebtoken": "^8.5.1",
     "request": "^2.83.0"
   },
   "devDependencies": {
