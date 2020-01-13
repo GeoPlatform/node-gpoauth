@@ -3,6 +3,11 @@ const TokenExpiredError = JWT.TokenExpiredError
 const color = require('./consoleColors.js')
 
 /**
+ * Store of lingering tokens to keep track of what has already been refrehsed.
+ */
+let lingeringTokenStore = new Map()
+
+/**
  * node-gpoauth middleware
  *
  * @param {Object} CONFIG - node-gpoauth configuration
@@ -12,6 +17,41 @@ const color = require('./consoleColors.js')
 module.exports = function(CONFIG, emitter, tokenHandler){
   const AUTH = require('./oauth.js')(CONFIG, emitter)
   const LOGGER = require('./logger.js')(CONFIG.AUTH_DEBUG);
+
+  /**
+   * The actual work of refreshing a token
+   *
+   * @param {*} req
+   */
+  async function requestRefreshToken(req){
+    const expiredAccessToken = tokenHandler.getAccessToken(req)
+    const oldRefreshToken = await tokenHandler.getRefreshToken(req)
+
+    if(oldRefreshToken){
+      LOGGER.debug(`-- Attempting Token Refresh - Access: ${LOGGER.tokenDemo(expiredAccessToken)} | Refresh : ${LOGGER.tokenDemo(oldRefreshToken)} --`)
+      return AUTH.requestTokenFromRefreshToken(oldRefreshToken)
+            .then(refResp => {
+              if(refResp.access_token && refResp.refresh_token){
+                LOGGER.debug("=== Refresh Succeeded ===")
+                LOGGER.debug("======= New Token =======")
+                LOGGER.debug('|| Access:  ' + LOGGER.tokenDemo(refResp.access_token))
+                LOGGER.debug('|| Refresh: ' + LOGGER.tokenDemo(refResp.refresh_token))
+                LOGGER.debug("=========================")
+
+                return {
+                  access_token: refResp.access_token,
+                  refresh_token: refResp.refresh_token
+                }
+              } else {
+                return {}
+              }
+            })
+
+    } else {
+      return {}
+    }
+  }
+
 
   /**
    * Emits an UnauthorizedRequest event or an error if the event does not have
@@ -40,6 +80,8 @@ module.exports = function(CONFIG, emitter, tokenHandler){
       next(LOGGER.formalError(msg)); // Fail if no handler setup
     }
   }
+
+
 
   /**
    * Does the accessToken need to be refrehed.
@@ -138,7 +180,7 @@ module.exports = function(CONFIG, emitter, tokenHandler){
       try {
         const jwt = tokenHandler.validateAccessToken(accessToken)
 
-        // Force refresh if withing REFRESH_DEBOUNCE buffer
+        // Force refresh if withing PRE_REFRESH_BUFFER buffer
         const now = (new Date()).getTime();
         if(needsRefreshed(now, jwt.exp * 1000, CONFIG.PRE_REFRESH_BUFFER)){
           throw new TokenExpiredError('Token is past PRE_REFRESH_BUFFER limit', now - CONFIG.PRE_REFRESH_BUFFER);
@@ -153,7 +195,25 @@ module.exports = function(CONFIG, emitter, tokenHandler){
           if(isPastMaxAllowableTime(accessToken)){
             // Past MAX_ALLOWED : token is actually expired
             LOGGER.logRequest(`Expired token used: ${err}`, accessToken, req)
-            refreshDebounce(accessToken, req, res, next);
+
+            if(!lingeringTokenStore.has(accessToken)) {
+              // Record that we have already refreshed this token
+              lingeringTokenStore.set(accessToken, 1)
+
+              refreshAccessTokenAndReprocess(/*accessToken,*/ req, res, next)
+              .then(() => {
+                // Remove from linger when limit is reached
+                setTimeout(() => {
+                  lingeringTokenStore.delete(accessToken)
+                }, CONFIG.REFRESH_LINGER)
+              })
+              .catch((err) => {
+                // Failed to refresh remove token from linger
+                lingeringTokenStore.delete(accessToken)
+              })
+             } else {
+               grantAccess(req, res, next)
+             }
 
           } else {
             // Allow them through because time left on linger
@@ -172,138 +232,39 @@ module.exports = function(CONFIG, emitter, tokenHandler){
 
   /**
    * Takes an expired AccessToken and exchanges it for a new one (via a
-   * refreshToken). This funtion will debounce requests with the same AccessToken
-   * and resolve all of them together (once the new token is aquired).
+   * refreshToken). This will pass on the request (to appropriate handlers)
+   * once the request for the refresh token has been fulfilled.
    *
    * Side effects:
-   *  - sets the access token in cookie on successful refresh
+   *  - sets the access token in req.cookie on successful refresh
    *
    * @method refreshAccessToken
    * @see returned function for params list
    */
-  const refreshDebounce = (function(){
-    // encloing scope: private variables for returned function
+  function refreshAccessTokenAndReprocess(/*expiredAccessToken,*/ req, res, next) {
+    return requestRefreshToken(req)
+            .then(tokens => {
+              if (tokens.access_token){
+                // Set new token on response
+                tokenHandler.setTokens(res, tokens.access_token, tokens.refresh_token)
+                // Pass back to verifyJWT for processing
+                grantAccess(req, res, next)
 
-   /*
-    * Object for queuing refresh request (debounce). This keeps track of all
-    * pending requests for a new refresh token along with all the requests
-    * to the server awaiting an authentication decision.
-    *
-    * Schema:
-    *  {
-    *    accessToken: {
-    *      request: ,   // id of function call to refresh token
-    *      queue: [{    // req, res, next to pass to calls awaiting middleware
-    *        req: req   // express request object
-    *        res: res   // express response object
-    *        next: next // express next function
-    *      }]
-    *    },
-    *    ...
-    *  }
-    */
-    let refreshQueue = {}
+              } else {
+                LOGGER.debug(`-- Refresh Failed : no tokens returned from IDP refresh (refresh token had likely expired) --`)
+                tokenHandler.clearTokens(res)
+                AUTH.sendRefreshErrorEvent(new Error('Failed to refresh token with IDP service.'), req, res, next);
+              }
+            })
+            .catch(err => {
+              LOGGER.debug(`${color.FgRed}=== Error on refresh token: ===${color.Reset}`);
+              LOGGER.debug(err.message)
+              console.log(err)
+              // tokenHandler.clearTokens(res)
+              AUTH.sendRefreshErrorEvent(err, req, res, next);
+            })
+  }
 
-    /**
-     * The actual work of refreshing a token
-     *
-     * @param {*} refreshQueueRecord
-     * @param {*} req
-     * @param {*} res
-     * @param {*} next
-     */
-    async function refreshAccessToken(req){
-      const expiredAccessToken = tokenHandler.getAccessToken(req)
-      const oldRefreshToken = await tokenHandler.getRefreshToken(req)
-
-      if(oldRefreshToken){
-        LOGGER.debug(`-- Attempting Token Refresh - Access: ${LOGGER.tokenDemo(expiredAccessToken)} | Refresh : ${LOGGER.tokenDemo(oldRefreshToken)} --`)
-        return AUTH.requestTokenFromRefreshToken(oldRefreshToken)
-              .then(refResp => {
-                if(refResp.access_token && refResp.refresh_token){
-                  LOGGER.debug("=== Refresh Succeeded ===")
-                  LOGGER.debug("======= New Token =======")
-                  LOGGER.debug('|| Access:  ' + LOGGER.tokenDemo(refResp.access_token))
-                  LOGGER.debug('|| Refresh: ' + LOGGER.tokenDemo(refResp.refresh_token))
-                  LOGGER.debug("=========================")
-
-                  return {
-                    access_token: refResp.access_token,
-                    refresh_token: refResp.refresh_token
-                  }
-                } else {
-                  return {}
-                }
-              })
-
-      } else {
-        return {}
-      }
-    }
-
-    /**
-     * The function assigned to refreshAccessToken. This is the callable
-     * function.
-     *
-     * @param {AccessToken} oldAccessToken - expired AccessToken to refresh
-     * @param {Request} req - Express request object
-     * @param {Response} res - Express response object
-     * @param {Middleware next} next - Express middleware next function
-     */
-    return function(expiredAccessToken, req, res, next){
-      // Debounce
-      if(refreshQueue[expiredAccessToken]){
-        let rqr = refreshQueue[expiredAccessToken]
-        // Debounce the call to fetch refresh token
-        clearTimeout(rqr.request)
-        rqr.request = null
-        rqr.queue.push({ req, res, next });
-      } else {
-        // Add refreshQueue record if none existing for this oldAccessToken
-        refreshQueue[expiredAccessToken] = {
-          request: null,
-          queue: [{ req, res, next }]
-        }
-      }
-
-      // Make sure we have the right record (post upsert)
-      let refreshQueueRecord = refreshQueue[expiredAccessToken]
-
-      // Go ahead an fetch new AccessToken
-      // TODO: lift this function at some point....
-      refreshQueueRecord.request = setTimeout(() => {
-        refreshAccessToken(req)
-          .then(tokens => {
-
-            if (tokens.access_token){
-              // Pass back to verifyJWT for processing
-              refreshQueueRecord.queue.map(r => {
-                // Update request with new token to pass validation (post refresh)
-                tokenHandler.setTokens(r.res, tokens.access_token, tokens.refresh_token)
-                grantAccess(r.req, r.res, r.next)
-              })
-
-              // remove the record (all requests have been fulfilled)
-              delete refreshQueue[expiredAccessToken]
-
-
-            } else {
-              LOGGER.debug(`-- Refresh Failed : no tokens returned from IDP refresh (refresh token had likely expired) --`)
-              tokenHandler.clearTokens(res)
-              AUTH.sendRefreshErrorEvent(new Error('Failed to refresh token with IDP service.'), req, res, next);
-            }
-
-          })
-          .catch(err => {
-            LOGGER.debug(`${color.FgRed}=== Error on refresh token: ===${color.Reset}`);
-            LOGGER.debug(err.message)
-            console.log(err)
-            // tokenHandler.clearTokens(res)
-            AUTH.sendRefreshErrorEvent(err, req, res, next);
-          })
-      }, CONFIG.REFRESH_DEBOUNCE);
-    }
-  })();
 
   // Exposing ======================================
   return { verifyJWT }
