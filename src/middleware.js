@@ -89,6 +89,11 @@ module.exports = function(CONFIG, emitter, tokenHandler){
     const EXP = JWT.decode(accessToken).exp * 1000 // seconds to milliseconds
     const MAX_ALLOWED = (new Date(EXP + CONFIG.REFRESH_LINGER)).getTime()
     const NOW = (new Date()).getTime()
+    // console.log('EXP: ', EXP)
+    // console.log('MAX: ', MAX_ALLOWED)
+    // console.log('NOW: ', NOW)
+    // console.log('old: ', NOW > MAX_ALLOWED)
+
     return NOW > MAX_ALLOWED
   }
 
@@ -247,11 +252,12 @@ module.exports = function(CONFIG, emitter, tokenHandler){
      */
     return function(expiredAccessToken, req, res, next){
       // Debounce
-      let refreshQueueRecord = refreshQueue[expiredAccessToken]
-      if(refreshQueueRecord){
+      if(refreshQueue[expiredAccessToken]){
+        let rqr = refreshQueue[expiredAccessToken]
         // Debounce the call to fetch refresh token
-        clearTimeout(refreshQueueRecord.request)
-        refreshQueueRecord.queue.push({ req, res, next });
+        clearTimeout(rqr.request)
+        rqr.request = null
+        rqr.queue.push({ req, res, next });
       } else {
         // Add refreshQueue record if none existing for this oldAccessToken
         refreshQueue[expiredAccessToken] = {
@@ -261,7 +267,7 @@ module.exports = function(CONFIG, emitter, tokenHandler){
       }
 
       // Make sure we have the right record (post upsert)
-      refreshQueueRecord = refreshQueue[expiredAccessToken]
+      let refreshQueueRecord = refreshQueue[expiredAccessToken]
 
       // Go ahead an fetch new AccessToken
       // TODO: lift this function at some point....
@@ -276,6 +282,10 @@ module.exports = function(CONFIG, emitter, tokenHandler){
                 tokenHandler.setTokens(r.res, tokens.access_token, tokens.refresh_token)
                 grantAccess(r.req, r.res, r.next)
               })
+
+              // remove the record (all requests have been fulfilled)
+              delete refreshQueue[expiredAccessToken]
+
 
             } else {
               LOGGER.debug(`-- Refresh Failed : no tokens returned from IDP refresh (refresh token had likely expired) --`)
