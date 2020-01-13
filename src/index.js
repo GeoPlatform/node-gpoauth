@@ -21,7 +21,67 @@ const pkg = require('../package.json')
  *  - tokenHandler.js : commun functions for interacting with and persisting tokens
  */
 module.exports = function(app, userConf) {
+  const PARSERS = {
+    BOOLEAN: parseBoolean,
+    FLOAT: parseFloat,
+    INT: parseInt
+  }
 
+  /**
+   * Convert passed in env var (string) and parse as a boolean
+   * @param {String} value
+   */
+  function parseBoolean(value){
+    const trues = [
+      'true',
+      'True',
+      'TRUE',
+      '1'
+    ]
+
+    return typeof value === 'boolean' ?
+           value :
+           trues.includes(value)
+  }
+
+
+  /**
+   * We only have to convert fields that are not strings
+   */
+  const fieldsToConvert = {
+    // optionals
+    REFRESH_DEBOUNCE: PARSERS.INT,
+    PRE_REFRESH_BUFFER: PARSERS.INT,
+    REFRESH_LINGER: PARSERS.INT,
+    AUTH_DEBUG: PARSERS.BOOLEAN,
+    AUTH_DEV_MODE: PARSERS.BOOLEAN,
+    // Token Cache
+    TOKEN_CACHE_PORT: PARSERS.INT,
+  }
+
+
+  /**
+   * User Configuration with the correct types
+   */
+  const typeParsedConfig = Object.assign({}, Object.entries(userConf)
+                                .map(([field, value]) => {
+                                  const valueAsType = fieldsToConvert[field] ?
+                                                      fieldsToConvert[field](value) :
+                                                      value
+                                  return [field, valueAsType]
+                                })
+                                .reduce((acc, [field, value]) => {
+                                  acc[field] = value
+                                  return acc
+                                }, {}))
+
+  // Validate passed in config
+  validateUserConfig(userConf); // will throw err on invalid config
+
+
+  /**
+   * Standard default values
+   */
   const defaults = {
     IDP_TOKEN_URL: "/auth/token",
     IDP_AUTH_URL: '/auth/authorize',
@@ -41,10 +101,8 @@ module.exports = function(app, userConf) {
     TOKEN_CACHE_AUTHDB: 'admin'
   }
 
-  // Validate passed in config
-  validateUserConfig(userConf); // will throw err on invalid config
   // Combine userConfig and constants for full config
-  const CONFIG = Object.assign(defaults, userConf)
+  const CONFIG = Object.assign(defaults, typeParsedConfig)
 
   const tokenHandler = require('./tokenHandler.js')(CONFIG)
   const emitter = new MyEmitter();  // Event Emitter
