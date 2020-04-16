@@ -9,6 +9,7 @@ const request = require('request');
 
 
 /*****  Setup  *****/
+/*
 const config = {
     IDP_BASE_URL:	process.env.npm_package_config_IDP_BASE_URL,
     APP_BASE_URL:	process.env.npm_package_config_APP_BASE_URL,
@@ -16,6 +17,9 @@ const config = {
     APP_SECRET:     process.env.npm_package_config_APP_SECRET,
     SERVICE_NAME:	process.env.npm_package_config_SERVICE_NAME,
 }
+*/
+const pkg = require('../package')
+const config = pkg.config
 
 /**
  * Make a temporary app to test the service against.

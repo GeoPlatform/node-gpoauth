@@ -12,7 +12,7 @@ exports = module.exports = function(config, unauthorizedRequestHandler) {
     }
 
     // A protected resource
-    app.get('/api/resource', (res, req) => {
+    app.get('/api/resource', (req, res) => {
         res.send({
             msg: "I am a protectecd resource."
         })
