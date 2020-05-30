@@ -1,9 +1,9 @@
 # node-gpoauth
 
-A NodeJS module used for automating the link to gpoauth's OAuth2 IDP for a NodeJS applictaion.
+A NodeJS module used for automating the link to gpoauth's OAuth2 IDP for a NodeJS application.
 
 ## Overview
-Node-gpoauth is a standardized node module that can be loading into any NodeJS appliction.
+Node-gpoauth is a standardized node module that can be loading into any NodeJS application.
 Node-gpoauth does the following things:
 - Automatically direct user to IDP for authentication
 - Setup endpoints on your application for redirecting users for Authentication and communicating with gpoauth IDP
@@ -12,15 +12,15 @@ Node-gpoauth does the following things:
 - Validate (server side) JWT signature against IA application secret for each request
 - Emit important authentication events to hosting application
 
-The node-gpoauth moduel will setup up a few api routes for your application. These routes are:
+The node-gpoauth model will setup up a few api routes for your application. These routes are:
 
 | Endpoint | Description | Optional Query parameters |
 |---|---|---|
-| /login | Endpoint that will re-direct user to IDP for authentication. | **redirect_url**: optional url to redirct user to after authenticating <br><br> **sso**: SSO login boolean. Set to true if attempting SSO login, in this case gpoauth will automatically submit login form and login chain may fail (This is intended as a headless/no UI login attempt). |
+| /login | Endpoint that will re-direct user to IDP for authentication. | **redirect_url**: optional url to redirect user to after authenticating <br><br> **sso**: SSO login boolean. Set to true if attempting SSO login, in this case gpoauth will automatically submit login form and login chain may fail (This is intended as a headless/no UI login attempt). |
 | /authtoken | Endopint that will handle Grant Code exchange from IDP. | |
-| /revoke | Endpoint for revoking JWT. This should be called on logout| **sso**: Optional boolean field. If true the request will be redirected to the gpoauth /revoke endpoint. This will reirect the request to the browser to the gpoauth login page and clear the gpoauth session cookie (required for true logout). |
+| /revoke | Endpoint for revoking JWT. This should be called on logout| **sso**: Optional boolean field. If true the request will be redirected to the gpoauth /revoke endpoint. This will redirect the request to the browser to the gpoauth login page and clear the gpoauth session cookie (required for true logout). |
 | /checktoken | Endpoint that allows front end application to refresh accessToken in the event that is has expired. | |
-| /auth/loading | Endpoint for showing simplified page that sets localstorage. This is desifned to work alongside ng-common to set expected variables (namly, window.localStorage.gpoauthJWT). | |
+| /auth/loading | Endpoint for showing simplified page that sets localstorage. This is defined to work alongside ng-common to set expected variables (namely, window.localStorage.gpoauthJWT). | |
 
 
 <br>
@@ -33,21 +33,22 @@ Import node-gpoauth directly from github using the following in package.json:
 <br>
 
 ### Development and local integration
-To develop with `node-gpoauth` locally you will need to install it from you local file system. First start by checking out the codebase and then use NPM in insalll it locally:
-> $ # Clone node-gpoauth
+To develop with `node-gpoauth` locally you will need to install it from you local file system. First start by checking out the codebase and then use NPM in install it locally:
+
+Clone node-gpoauth
 > $ git clone git@github.com:GeoPlatform/node-gpoauth.git
->
-> $ # cd to your appliction (local development)
+
+cd to your application (local development)
 > $ cd myApp
->
-> $ # install using npm (path relative to your application directory)
-> $ npm install file:../node-gpoauth
+
+install using npm (path relative to your application directory)
+> $ npm install ../node-gpoauth
 
 <br>
 <br>
 
 ## Usage
-Load and instanciate the module:
+Load and instantiate the module:
 ```javascript
 // Modules =================================================
 const express     = require('express');
@@ -77,49 +78,49 @@ Setting up the module requires two fields:
 | Param | Type | Description |
 |---|---|---|
 |app | ExpressJS app object | ExpressJS App |
-|config | Object | Configuraion for the node-gpoaut. See configuration section below.|
+|config | Object | Configuration for the node-gpoauth. See configuration section below.|
 
 
 <br><br>
 
 ## Configuration
-The following are the fields that can be on the configurartion object sent to node-gpoauth.
+The following are the fields that can be on the configuration object sent to node-gpoauth.
 ### Required Fields
 
 | Field | Type | Description| Example |
 |---|---|---|---|
-|IDP_BASE_URL| sring | The base domain for the IDP sevice | https://idp.geoplatform.gov|
-|APP_ID | string | The Application ID as it was registerd with the IDP service | 5a720833cf282142f97d7f04 |
-|APP_SECRET | string | The Application secret that was generated with the Application was  regestered with the IDP | KILTjRrzRhitJY5CRW56s9owDEMtYCldAj4IE6NxwN |
+|IDP_BASE_URL| string | The base domain for the IDP service | https://idp.geoplatform.gov|
+|APP_ID | string | The Application ID as it was registered with the IDP service | 5a720833cf282142f97d7f04 |
+|APP_SECRET | string | The Application secret that was generated with the Application was  registered with the IDP | KILTjRrzRhitJY5CRW56s9owDEMtYCldAj4IE6NxwN |
 |APP_BASE_URL | string | Base URL of the application hosted where this module is being used. This is used for redirecting the user back to your application once they have authenticated. | http://map.geoplatform.gov |
 
 ### Optional Fields
 
 | Field | Type | Description| Default |
 |---|---|---|---|
-|COOKIE_DOMAIN| string | The domain to set for cookie containing the token header. This will determin what domains have access to the token via cookie. | ".geoplatform.gov" |
-|REFRESH_DEBOUNCE| int | Milliseconds to delay the request to obtain a new access token. This will allow requests to queue and all return at once when the token has been succesfully refreshed. | 250 |
+|COOKIE_DOMAIN| string | The domain to set for cookie containing the token header. This will determine what domains have access to the token via cookie. | ".geoplatform.gov" |
+|REFRESH_DEBOUNCE| int | Milliseconds to delay the request to obtain a new access token. This will allow requests to queue and all return at once when the token has been successfully refreshed. | 250 |
 |PRE_REFRESH_BUFFER| int | Milliseconds before token expires to initiate a pre-expiration refresh request. This is helpful when requests will be passed to another service to prevent token expiration during that request. | 250 |
 |REFRESH_LINGER| int | Milliseconds to delay purging refresh token. This is used for slow network traffic or high concurrent request volume. | 250 |
 |AUTH_DEBUG| boolean | If true print out debug information from node-gpoauth | false |
 |AUTH_DEV_MODE | boolean | Run in development mode. Development mode will change the way that tokens are passed (in cookies). Dev mode is less secure and should not be used in production systems. | false |
 
 ### Common Token Cache
-The default behavior of the system is to store all refresh tokens locally in memory. This means that only the appliction that originally requested the access and refreh token is able to refresh the access token. If you provide mongoDB setting, the code will use a common TokenCache in mongoDB. This will allow other applictions to use the same tokens and allow a user to stay logged in across multiple applications.
+The default behavior of the system is to store all refresh tokens locally in memory. This means that only the application that originally requested the access and refresh token is able to refresh the access token. If you provide mongoDB setting, the code will use a common TokenCache in mongoDB. This will allow other applications to use the same tokens and allow a user to stay logged in across multiple applications.
 
 | Field | Type | Description| Default | Example |
 |---|---|---|---|---|
-|TOKEN_CACHE_HOST | string | The host IP address where the MongoDB is locatied | - | "10.11.12.1" |
+|TOKEN_CACHE_HOST | string | The host IP address where the MongoDB is located | - | "10.11.12.1" |
 |TOKEN_CACHE_USER | string | The username for the Mongo Database. | - | 'MyUser' |
 |TOKEN_CACHE_PASS | string | The password for the Mongo user. | - | 'MyPassword' |
 |TOKEN_CACHE_PORT | int | The port for MongoDB. | 27017 | 12345 |
-|TOKEN_CACHE_AUTHDB | string | The authentication database name for MongoDB (where user data is stored). | 'admin' | 'myAuthDatase' |
+|TOKEN_CACHE_AUTHDB | string | The authentication database name for MongoDB (where user data is stored). | 'admin' | 'myAuthDatabase' |
 
 
 <br><br>
 
 ## Properties set on "req" object
-The JWT and accessToken (encoded JWT) are made avaliable in all authorized node-gpoauth requests. These will not be set on unauthorized requests. The properties are:
+The JWT and accessToken (encoded JWT) are made available in all authorized node-gpoauth requests. These will not be set on unauthorized requests. The properties are:
 
 |Property|Description|
 |---|---|
@@ -141,7 +142,7 @@ Gpoauth passes user data around using JWTs (for more info on JWTs see: https://j
      { _id: '5a7b3cb5113cb7001d0cd63a', name: 'Administrators' },
      { _id: '5a7b3cb5113cb7001d0cd639', name: 'Users' }
   ],
-  orgs: [                                     // Users organiztion
+  orgs: [                                     // Users organization
     { id: '5a7b3cb5113cb7001d0cd238', name: 'Image Matters, LLC' }
   ],
   scope: [ 'read' ],
@@ -158,9 +159,9 @@ Gpoauth passes user data around using JWTs (for more info on JWTs see: https://j
 <br>
 
 ## Events
-The following events are emitted from the module that allow the hosting Application to respond to IDP events. See the Usage section for an example of seting up an event handler. Only the **unauthorizedRequest** event handler is required to be implemented. See below for a full description of each event.
+The following events are emitted from the module that allow the hosting Application to respond to IDP events. See the Usage section for an example of setting up an event handler. Only the **unauthorizedRequest** event handler is required to be implemented. See below for a full description of each event.
 
-Avaliable events are:
+Available events are:
   - userAuthenticated (optional)
   - unauthorizedRequest (**required**)
   - accessGranted (optional)
@@ -171,7 +172,7 @@ Avaliable events are:
 
 
 >## userAuthenticated (optional)
->Event that is fired when a user is authenticated to IDP through your application. The event will only fire when a user completes the redirect back to your application after logging into the IDP (it will not happen per request for already authenticted users). This event is useful for creating a user in your system (or linking an existing user in your system) with an IDP user.
+>Event that is fired when a user is authenticated to IDP through your application. The event will only fire when a user completes the redirect back to your application after logging into the IDP (it will not happen per request for already authenticated users). This event is useful for creating a user in your system (or linking an existing user in your system) with an IDP user.
 >
 >**Parameters:**
 >
@@ -212,7 +213,7 @@ Avaliable events are:
 > This event is called with an unauthorized request is made to your application. It will only be called in the event that the client (browser) making the request does not have a valid JWT. Depending on how your application is set up you may want to filter only some requests. For example, if your application servers both static assets as well as an API you will only want to limit access to the API. You application is required to implement a handler for this event. If there is no registered event handler for this event node-gpoauth will throw and error.
 >
 >**NOTE:**
->Failing to either call the next funcation or send a response to the client will cause the application to hang as Express will not continue processing the request middleware.
+>Failing to either call the next function or send a response to the client will cause the application to hang as Express will not continue processing the request middleware.
 >
 >**Parameters:**
 >
@@ -243,7 +244,7 @@ Avaliable events are:
 >```
 ---
 > ## accessGranted (optional)
-> This event is called when a user has a valid JWT and are about to be passed on for regular request processing. This event can be used as a kind of catch all middleware for more granular access control based on the user requesting the resource. The JWT can be accessed via req.jwt and user information can then be used to futher restrict access to resources. (See example below).
+> This event is called when a user has a valid JWT and are about to be passed on for regular request processing. This event can be used as a kind of catch all middleware for more granular access control based on the user requesting the resource. The JWT can be accessed via req.jwt and user information can then be used to further restrict access to resources. (See example below).
 >
 >**NOTE:**
 >By default, if this event is not implemented the request will be treated as a regular request.
@@ -278,10 +279,10 @@ Avaliable events are:
 
 ---
 > ## errorRefreshingAccessToken (optional)
-> This event is called when node-gpoauth was not able to successfully refresh an accessToken. This usually happnens when either node-gpoauth does not have a refreshToken associated to the accessToken or when the gpoauth server refused to grant another access token.
+> This event is called when node-gpoauth was not able to successfully refresh an accessToken. This usually happens when either node-gpoauth does not have a refreshToken associated to the accessToken or when the gpoauth server refused to grant another access token.
 >
 >**NOTE:**
->By default, if this event is not implemented the request will be treated as a regular unauthenticaedRequest and will be handeled by that event.
+>By default, if this event is not implemented the request will be treated as a regular unauthenticatedRequest and will be handled by that event.
 >
 >**Parameters:**
 >
