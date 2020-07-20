@@ -68,8 +68,9 @@ module.exports = function(CONFIG, app, emitter, tokenHandler) {
     const authURL = CONFIG.IDP_BASE_URL +
                     CONFIG.IDP_AUTH_URL +
                     `?response_type=code` +
+                    `&response_mode=fragment` +
                     `&redirect_uri=` + encodeURIComponent(`${CONFIG.APP_BASE_URL}/authtoken/${redirectURL}`) +
-                    `&scope=read` +
+                    `&scope=openid` +
                     `&client_id=${CONFIG.APP_ID}`;
 
     LOGGER.debug(`Login request received: redirecting to ${color.FgBlue}${authURL}${color.Reset}`)
@@ -141,7 +142,7 @@ module.exports = function(CONFIG, app, emitter, tokenHandler) {
 
 
   /**
-   * Endpoint that presents loading theentire applicaiton again when all
+   * Endpoint that prevents loading theentire applicaiton again when all
    * that we really want is to set the cookie and call events for
    * ng-common to handle.
    */
