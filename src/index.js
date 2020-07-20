@@ -84,7 +84,7 @@ module.exports = function(app, userConf) {
    */
   const defaults = {
     IDP_TOKEN_URL: "/auth/token",
-    IDP_AUTH_URL: '/auth/authorize',
+    IDP_AUTH_URL: '/auth',
     AUTH_TYPE: "grant",
     SCOPES: 'read',
 
