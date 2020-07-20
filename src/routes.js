@@ -68,7 +68,6 @@ module.exports = function(CONFIG, app, emitter, tokenHandler) {
     const authURL = CONFIG.IDP_BASE_URL +
                     CONFIG.IDP_AUTH_URL +
                     `?response_type=code` +
-                    `&redirect_uri=` + encodeURIComponent(`${CONFIG.APP_BASE_URL}/authtoken/${redirectURL}`) +
                     `&scope=read` +
                     `&client_id=${CONFIG.APP_ID}`;
 
